@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "lint": "xcodebuild -project BalloonOverlayApp.xcodeproj -scheme BalloonOverlayApp -configuration Debug build",
+    "build": "rm -rf dist && mkdir -p dist && cp -R web/. dist/"
+  },
+  "devDependencies": {}
+}

@@ -9,6 +9,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.settings.hasEnabledBalloons else { return }
             self.overlayController.show()
         },
+        showCodexCompletion: { [weak self] title, message, details, isSuccess in
+            guard let self else { return }
+            self.settings.presentCodexCompletionBalloon(
+                title: title,
+                message: message,
+                details: details,
+                isSuccess: isSuccess
+            )
+            self.overlayController.show { [weak self] in
+                self?.settings.clearTemporaryBalloon()
+            }
+        },
         settingsChanged: { [weak self] in self?.settingsChanged() },
         pauseChanged: { [weak self] in self?.pauseChanged() }
     )
@@ -42,8 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: settings.displayInterval, repeats: true) { [weak self] _ in
-            guard let self, !self.settings.isPaused, self.settings.hasEnabledBalloons else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: settings.nextDisplayInterval(), repeats: false) { [weak self] _ in
+            guard let self else { return }
+            defer { self.startTimer() }
+            guard !self.settings.isPaused, self.settings.hasEnabledBalloons else { return }
             self.settings.activateNextEnabledBalloon()
             self.overlayController.show()
         }

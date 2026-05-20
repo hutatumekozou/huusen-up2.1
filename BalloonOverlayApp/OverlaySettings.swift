@@ -2,59 +2,111 @@ import Foundation
 
 struct BalloonProfile: Codable, Identifiable {
     let id: UUID
+    var itemNumber: Int
     var title: String
     var text: String
+    var explanationText: String
+    var explanationImageDataURLs: [String]
     var imageName: String?
+    var imageDataURL: String?
+    var backText: String
+    var backImageName: String?
+    var backImageDataURL: String?
+    var genreName: String
+    var smallCategoryName: String
     var colorName: String
     var colorStartHex: String
     var colorEndHex: String
     var positionName: String
+    var sizeName: String
     var pausesAtMiddle: Bool
     var middlePauseDuration: Double
     var isEnabled: Bool
+    var correctCount: Int
+    var incorrectCount: Int
+    var lastReviewedAt: Date?
     var createdAt: Date
 
     init(
         id: UUID,
+        itemNumber: Int,
         title: String,
         text: String,
+        explanationText: String,
+        explanationImageDataURLs: [String],
         imageName: String?,
+        imageDataURL: String?,
+        backText: String,
+        backImageName: String?,
+        backImageDataURL: String?,
+        genreName: String,
+        smallCategoryName: String,
         colorName: String,
         colorStartHex: String,
         colorEndHex: String,
         positionName: String,
+        sizeName: String,
         pausesAtMiddle: Bool,
         middlePauseDuration: Double,
         isEnabled: Bool,
+        correctCount: Int,
+        incorrectCount: Int,
+        lastReviewedAt: Date?,
         createdAt: Date
     ) {
         self.id = id
+        self.itemNumber = itemNumber
         self.title = title
         self.text = text
+        self.explanationText = explanationText
+        self.explanationImageDataURLs = explanationImageDataURLs
         self.imageName = imageName
+        self.imageDataURL = imageDataURL
+        self.backText = backText
+        self.backImageName = backImageName
+        self.backImageDataURL = backImageDataURL
+        self.genreName = genreName
+        self.smallCategoryName = smallCategoryName
         self.colorName = colorName
         self.colorStartHex = colorStartHex
         self.colorEndHex = colorEndHex
         self.positionName = positionName
+        self.sizeName = sizeName
         self.pausesAtMiddle = pausesAtMiddle
         self.middlePauseDuration = middlePauseDuration
         self.isEnabled = isEnabled
+        self.correctCount = correctCount
+        self.incorrectCount = incorrectCount
+        self.lastReviewedAt = lastReviewedAt
         self.createdAt = createdAt
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
+        itemNumber = try container.decodeIfPresent(Int.self, forKey: .itemNumber) ?? 0
         title = try container.decode(String.self, forKey: .title)
         text = try container.decode(String.self, forKey: .text)
+        explanationText = try container.decodeIfPresent(String.self, forKey: .explanationText) ?? ""
+        explanationImageDataURLs = try container.decodeIfPresent([String].self, forKey: .explanationImageDataURLs) ?? []
         imageName = try container.decodeIfPresent(String.self, forKey: .imageName)
+        imageDataURL = try container.decodeIfPresent(String.self, forKey: .imageDataURL)
+        backText = try container.decodeIfPresent(String.self, forKey: .backText) ?? ""
+        backImageName = try container.decodeIfPresent(String.self, forKey: .backImageName)
+        backImageDataURL = try container.decodeIfPresent(String.self, forKey: .backImageDataURL)
+        genreName = try container.decodeIfPresent(String.self, forKey: .genreName) ?? "未分類"
+        smallCategoryName = try container.decodeIfPresent(String.self, forKey: .smallCategoryName) ?? ""
         colorName = try container.decode(String.self, forKey: .colorName)
         colorStartHex = try container.decode(String.self, forKey: .colorStartHex)
         colorEndHex = try container.decode(String.self, forKey: .colorEndHex)
         positionName = try container.decodeIfPresent(String.self, forKey: .positionName) ?? "中央"
+        sizeName = try container.decodeIfPresent(String.self, forKey: .sizeName) ?? "標準"
         pausesAtMiddle = try container.decodeIfPresent(Bool.self, forKey: .pausesAtMiddle) ?? false
         middlePauseDuration = try container.decodeIfPresent(Double.self, forKey: .middlePauseDuration) ?? 1.0
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        correctCount = try container.decodeIfPresent(Int.self, forKey: .correctCount) ?? 0
+        incorrectCount = try container.decodeIfPresent(Int.self, forKey: .incorrectCount) ?? 0
+        lastReviewedAt = try container.decodeIfPresent(Date.self, forKey: .lastReviewedAt)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
@@ -68,6 +120,11 @@ struct BalloonColorOption {
 struct BalloonPositionOption {
     let name: String
     let ratio: Double?
+}
+
+struct BalloonSizeOption {
+    let name: String
+    let scale: Double
 }
 
 final class OverlaySettings {
@@ -91,13 +148,22 @@ final class OverlaySettings {
         BalloonPositionOption(name: "ランダム", ratio: nil)
     ]
 
+    static let sizeOptions: [BalloonSizeOption] = [
+        BalloonSizeOption(name: "標準", scale: 1.0),
+        BalloonSizeOption(name: "ラージ", scale: 2.0)
+    ]
+
     private let defaults: UserDefaults
 
     var displayInterval: TimeInterval
+    var randomIntervalMinSeconds: TimeInterval
+    var randomIntervalMaxSeconds: TimeInterval
     var climbSpeed: Double
     var balloons: [BalloonProfile]
     var activeBalloonID: UUID?
     var isPaused: Bool
+    private var temporaryBalloon: BalloonProfile?
+    private var allStopSnapshotEnabledIDs: Set<UUID>
 
     var enabledBalloons: [BalloonProfile] {
         balloons.filter(\.isEnabled)
@@ -107,7 +173,15 @@ final class OverlaySettings {
         !enabledBalloons.isEmpty
     }
 
+    var canRestoreAllStopState: Bool {
+        !allStopSnapshotEnabledIDs.isEmpty
+    }
+
     var activeBalloon: BalloonProfile {
+        if let temporaryBalloon {
+            return temporaryBalloon
+        }
+
         if let activeBalloonID, let balloon = balloons.first(where: { $0.id == activeBalloonID && $0.isEnabled }) {
             return balloon
         }
@@ -122,9 +196,15 @@ final class OverlaySettings {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         displayInterval = defaults.double(forKey: Keys.displayInterval)
+        randomIntervalMinSeconds = defaults.double(forKey: Keys.randomIntervalMinSeconds)
+        randomIntervalMaxSeconds = defaults.double(forKey: Keys.randomIntervalMaxSeconds)
         climbSpeed = defaults.double(forKey: Keys.climbSpeed)
         activeBalloonID = defaults.string(forKey: Keys.activeBalloonID).flatMap(UUID.init(uuidString:))
         isPaused = defaults.bool(forKey: Keys.isPaused)
+        allStopSnapshotEnabledIDs = Set(
+            defaults.stringArray(forKey: Keys.allStopSnapshotEnabledIDs)?
+                .compactMap(UUID.init(uuidString:)) ?? []
+        )
 
         if let data = defaults.data(forKey: Keys.balloons),
            let decoded = try? JSONDecoder().decode([BalloonProfile].self, from: data) {
@@ -136,45 +216,139 @@ final class OverlaySettings {
         if displayInterval <= 0 {
             displayInterval = 30 * 60
         }
+        if randomIntervalMinSeconds <= 0 {
+            randomIntervalMinSeconds = 5
+        }
+        if randomIntervalMaxSeconds < randomIntervalMinSeconds {
+            randomIntervalMaxSeconds = max(randomIntervalMinSeconds, 600)
+        }
         if climbSpeed <= 0 {
             climbSpeed = 180
         }
         migrateLegacyBalloonIfNeeded()
+        assignMissingItemNumbersIfNeeded()
     }
 
-    func updateGlobalSettings(intervalMinutes: Double, climbSpeed: Double) {
+    func updateGlobalSettings(
+        intervalMinutes: Double,
+        randomIntervalMinSeconds: Double,
+        randomIntervalMaxSeconds: Double,
+        climbSpeed: Double
+    ) {
         displayInterval = max(intervalMinutes, 0.1) * 60
+        let minSeconds = max(randomIntervalMinSeconds, 1)
+        let maxSeconds = max(randomIntervalMaxSeconds, minSeconds)
+        self.randomIntervalMinSeconds = minSeconds
+        self.randomIntervalMaxSeconds = maxSeconds
         self.climbSpeed = min(max(climbSpeed, 40), 900)
         save()
+    }
+
+    func nextDisplayInterval() -> TimeInterval {
+        guard activeBalloon.positionName == "ランダム" else {
+            return displayInterval
+        }
+
+        return TimeInterval.random(in: randomIntervalMinSeconds...randomIntervalMaxSeconds)
+    }
+
+    func presentCodexCompletionBalloon(title: String, message: String, details: String, isSuccess: Bool) {
+        let color = isSuccess
+            ? BalloonColorOption(name: "グリーン", startHex: "#4cd964", endHex: "#159947")
+            : BalloonColorOption(name: "オレンジ", startHex: "#ff9f43", endHex: "#e86b00")
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Codex作業完了"
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? (isSuccess ? "作業が完了しました" : "作業で確認が必要です")
+        let trimmedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        temporaryBalloon = BalloonProfile(
+            id: UUID(),
+            itemNumber: 0,
+            title: trimmedTitle,
+            text: trimmedMessage,
+            explanationText: trimmedDetails,
+            explanationImageDataURLs: [],
+            imageName: nil,
+            imageDataURL: nil,
+            backText: "",
+            backImageName: nil,
+            backImageDataURL: nil,
+            genreName: "Codex通知",
+            smallCategoryName: "",
+            colorName: color.name,
+            colorStartHex: color.startHex,
+            colorEndHex: color.endHex,
+            positionName: "中央",
+            sizeName: "ラージ",
+            pausesAtMiddle: true,
+            middlePauseDuration: 300,
+            isEnabled: true,
+            correctCount: 0,
+            incorrectCount: 0,
+            lastReviewedAt: nil,
+            createdAt: Date()
+        )
+    }
+
+    func clearTemporaryBalloon() {
+        temporaryBalloon = nil
     }
 
     func addBalloon(
         title: String,
         text: String,
+        explanationText: String,
+        explanationImageDataURLs: [String],
         imageName: String?,
+        imageDataURL: String?,
+        backText: String,
+        backImageName: String?,
+        backImageDataURL: String?,
+        genreName: String,
+        smallCategoryName: String,
         colorName: String,
         positionName: String,
+        sizeName: String,
         pausesAtMiddle: Bool,
         middlePauseDuration: Double
     ) {
         let color = Self.colorOptions.first(where: { $0.name == colorName }) ?? Self.colorOptions[0]
         let position = Self.positionOptions.first(where: { $0.name == positionName }) ?? Self.positionOptions[1]
+        let size = Self.sizeOptions.first(where: { $0.name == sizeName }) ?? Self.sizeOptions[0]
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedExplanationText = explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedExplanationImageDataURLs = Self.cleanedExplanationImageDataURLs(explanationImageDataURLs)
+        let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
 
         let balloon = BalloonProfile(
             id: UUID(),
+            itemNumber: nextItemNumber(),
             title: trimmedTitle.isEmpty ? "無題の風船" : trimmedTitle,
             text: trimmedText.isEmpty ? "🎈" : trimmedText,
+            explanationText: trimmedExplanationText,
+            explanationImageDataURLs: trimmedExplanationImageDataURLs,
             imageName: imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            imageDataURL: imageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            backText: trimmedBackText,
+            backImageName: backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            backImageDataURL: backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
+            smallCategoryName: trimmedSmallCategoryName,
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
             positionName: position.name,
+            sizeName: size.name,
             pausesAtMiddle: pausesAtMiddle,
             middlePauseDuration: clampedPauseDuration,
             isEnabled: true,
+            correctCount: 0,
+            incorrectCount: 0,
+            lastReviewedAt: nil,
             createdAt: Date()
         )
 
@@ -187,9 +361,18 @@ final class OverlaySettings {
         id: UUID,
         title: String,
         text: String,
+        explanationText: String,
+        explanationImageDataURLs: [String],
         imageName: String?,
+        imageDataURL: String?,
+        backText: String,
+        backImageName: String?,
+        backImageDataURL: String?,
+        genreName: String,
+        smallCategoryName: String,
         colorName: String,
         positionName: String,
+        sizeName: String,
         pausesAtMiddle: Bool,
         middlePauseDuration: Double
     ) {
@@ -197,31 +380,95 @@ final class OverlaySettings {
 
         let color = Self.colorOptions.first(where: { $0.name == colorName }) ?? Self.colorOptions[0]
         let position = Self.positionOptions.first(where: { $0.name == positionName }) ?? Self.positionOptions[1]
+        let size = Self.sizeOptions.first(where: { $0.name == sizeName }) ?? Self.sizeOptions[0]
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedExplanationText = explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedExplanationImageDataURLs = Self.cleanedExplanationImageDataURLs(explanationImageDataURLs)
+        let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
         let createdAt = balloons[index].createdAt
         let isEnabled = balloons[index].isEnabled
+        let correctCount = balloons[index].correctCount
+        let incorrectCount = balloons[index].incorrectCount
+        let itemNumber = balloons[index].itemNumber
+        let lastReviewedAt = balloons[index].lastReviewedAt
 
         balloons[index] = BalloonProfile(
             id: id,
+            itemNumber: itemNumber,
             title: trimmedTitle.isEmpty ? "無題の風船" : trimmedTitle,
             text: trimmedText.isEmpty ? "🎈" : trimmedText,
+            explanationText: trimmedExplanationText,
+            explanationImageDataURLs: trimmedExplanationImageDataURLs,
             imageName: imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            imageDataURL: imageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            backText: trimmedBackText,
+            backImageName: backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            backImageDataURL: backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
+            smallCategoryName: trimmedSmallCategoryName,
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
             positionName: position.name,
+            sizeName: size.name,
             pausesAtMiddle: pausesAtMiddle,
             middlePauseDuration: clampedPauseDuration,
             isEnabled: isEnabled,
+            correctCount: correctCount,
+            incorrectCount: incorrectCount,
+            lastReviewedAt: lastReviewedAt,
             createdAt: createdAt
         )
         activeBalloonID = id
         save()
     }
 
+    func recordAnswer(for id: UUID, isCorrect: Bool) {
+        guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
+        if isCorrect {
+            balloons[index].correctCount += 1
+        } else {
+            balloons[index].incorrectCount += 1
+        }
+        activeBalloonID = id
+        save()
+    }
+
+    func undoAnswer(for id: UUID, isCorrect: Bool) {
+        guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
+        if isCorrect {
+            balloons[index].correctCount = max(0, balloons[index].correctCount - 1)
+        } else {
+            balloons[index].incorrectCount = max(0, balloons[index].incorrectCount - 1)
+        }
+        activeBalloonID = id
+        save()
+    }
+
+    func adjustAnswerCount(for id: UUID, isCorrect: Bool, delta: Int) {
+        guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
+        if isCorrect {
+            balloons[index].correctCount = max(0, balloons[index].correctCount + delta)
+        } else {
+            balloons[index].incorrectCount = max(0, balloons[index].incorrectCount + delta)
+        }
+        activeBalloonID = id
+        save()
+    }
+
+    func saveAnswerReview(for id: UUID) {
+        guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
+        balloons[index].lastReviewedAt = Date()
+        activeBalloonID = id
+        save()
+    }
+
     func activateBalloon(id: UUID) {
+        temporaryBalloon = nil
         guard balloons.contains(where: { $0.id == id && $0.isEnabled }) else { return }
         activeBalloonID = id
         save()
@@ -229,6 +476,7 @@ final class OverlaySettings {
 
     @discardableResult
     func activateNextEnabledBalloon() -> Bool {
+        temporaryBalloon = nil
         let enabledIDs = balloons.filter(\.isEnabled).map(\.id)
         guard !enabledIDs.isEmpty else { return false }
 
@@ -257,6 +505,137 @@ final class OverlaySettings {
         save()
     }
 
+    func setAllBalloonsEnabled(_ isEnabled: Bool) {
+        guard !balloons.isEmpty else { return }
+
+        if !isEnabled {
+            allStopSnapshotEnabledIDs = Set(enabledBalloons.map(\.id))
+            saveAllStopSnapshot()
+        }
+
+        for index in balloons.indices {
+            balloons[index].isEnabled = isEnabled
+        }
+
+        activeBalloonID = isEnabled ? balloons.last?.id : nil
+        save()
+    }
+
+    func setBalloonsEnabled(inGenre genreName: String, isEnabled: Bool) {
+        let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        var changedIDs: [UUID] = []
+
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            guard balloonGenreName == targetGenreName else { continue }
+
+            balloons[index].isEnabled = isEnabled
+            changedIDs.append(balloons[index].id)
+        }
+
+        guard !changedIDs.isEmpty else { return }
+
+        if isEnabled {
+            activeBalloonID = changedIDs.last
+        } else if let activeBalloonID, changedIDs.contains(activeBalloonID) {
+            self.activeBalloonID = enabledBalloons.last?.id
+        }
+
+        save()
+    }
+
+    func renameGenre(from oldName: String, to newName: String) {
+        let targetName = oldName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let replacementName = newName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        guard targetName != replacementName else { return }
+
+        var didChange = false
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            guard balloonGenreName == targetName else { continue }
+
+            balloons[index].genreName = replacementName
+            didChange = true
+        }
+
+        if didChange {
+            save()
+        }
+    }
+
+    func deleteGenre(named genreName: String) {
+        let targetName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        guard targetName != "未分類" else { return }
+
+        var didChange = false
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            guard balloonGenreName == targetName else { continue }
+
+            balloons[index].genreName = "未分類"
+            balloons[index].smallCategoryName = ""
+            didChange = true
+        }
+
+        if didChange {
+            save()
+        }
+    }
+
+    func renameSmallCategory(inGenre genreName: String, from oldName: String, to newName: String) {
+        let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let targetSmallCategoryName = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let replacementName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetSmallCategoryName.isEmpty, !replacementName.isEmpty, targetSmallCategoryName != replacementName else { return }
+
+        var didChange = false
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonSmallCategoryName = balloons[index].smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard balloonGenreName == targetGenreName, balloonSmallCategoryName == targetSmallCategoryName else { continue }
+
+            balloons[index].smallCategoryName = replacementName
+            didChange = true
+        }
+
+        if didChange {
+            save()
+        }
+    }
+
+    func deleteSmallCategory(inGenre genreName: String, named smallCategoryName: String) {
+        let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let targetSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetSmallCategoryName.isEmpty else { return }
+
+        var didChange = false
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonSmallCategoryName = balloons[index].smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard balloonGenreName == targetGenreName, balloonSmallCategoryName == targetSmallCategoryName else { continue }
+
+            balloons[index].smallCategoryName = ""
+            didChange = true
+        }
+
+        if didChange {
+            save()
+        }
+    }
+
+    func restoreAllStopState() {
+        guard !allStopSnapshotEnabledIDs.isEmpty else { return }
+
+        for index in balloons.indices {
+            balloons[index].isEnabled = allStopSnapshotEnabledIDs.contains(balloons[index].id)
+        }
+
+        activeBalloonID = enabledBalloons.last?.id
+        allStopSnapshotEnabledIDs.removeAll()
+        saveAllStopSnapshot()
+        save()
+    }
+
     func deleteBalloon(id: UUID) {
         balloons.removeAll { $0.id == id }
         if activeBalloonID == id {
@@ -272,11 +651,56 @@ final class OverlaySettings {
 
     private func save() {
         defaults.set(displayInterval, forKey: Keys.displayInterval)
+        defaults.set(randomIntervalMinSeconds, forKey: Keys.randomIntervalMinSeconds)
+        defaults.set(randomIntervalMaxSeconds, forKey: Keys.randomIntervalMaxSeconds)
         defaults.set(climbSpeed, forKey: Keys.climbSpeed)
         defaults.set(activeBalloonID?.uuidString, forKey: Keys.activeBalloonID)
 
         if let encoded = try? JSONEncoder().encode(balloons) {
             defaults.set(encoded, forKey: Keys.balloons)
+        }
+    }
+
+    private static func cleanedExplanationImageDataURLs(_ dataURLs: [String]) -> [String] {
+        Array(
+            dataURLs
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .prefix(4)
+        )
+    }
+
+    private func saveAllStopSnapshot() {
+        defaults.set(allStopSnapshotEnabledIDs.map(\.uuidString), forKey: Keys.allStopSnapshotEnabledIDs)
+    }
+
+    private func nextItemNumber() -> Int {
+        (balloons.map(\.itemNumber).max() ?? 0) + 1
+    }
+
+    private func assignMissingItemNumbersIfNeeded() {
+        var usedNumbers: Set<Int> = []
+        var nextNumber = (balloons.map(\.itemNumber).filter { $0 > 0 }.max() ?? 0) + 1
+        var didChange = false
+
+        for index in balloons.indices {
+            let currentNumber = balloons[index].itemNumber
+            if currentNumber > 0, !usedNumbers.contains(currentNumber) {
+                usedNumbers.insert(currentNumber)
+                continue
+            }
+
+            while usedNumbers.contains(nextNumber) {
+                nextNumber += 1
+            }
+            balloons[index].itemNumber = nextNumber
+            usedNumbers.insert(nextNumber)
+            nextNumber += 1
+            didChange = true
+        }
+
+        if didChange {
+            save()
         }
     }
 
@@ -291,16 +715,29 @@ final class OverlaySettings {
 
         let balloon = BalloonProfile(
             id: UUID(),
+            itemNumber: nextItemNumber(),
             title: "最初の風船",
             text: text,
+            explanationText: "",
+            explanationImageDataURLs: [],
             imageName: imageName?.nilIfEmpty,
+            imageDataURL: nil,
+            backText: "",
+            backImageName: nil,
+            backImageDataURL: nil,
+            genreName: "未分類",
+            smallCategoryName: "",
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
             positionName: "中央",
+            sizeName: "標準",
             pausesAtMiddle: false,
             middlePauseDuration: 1.0,
             isEnabled: true,
+            correctCount: 0,
+            incorrectCount: 0,
+            lastReviewedAt: nil,
             createdAt: Date()
         )
         balloons = [balloon]
@@ -312,16 +749,29 @@ final class OverlaySettings {
         let color = colorOptions[0]
         return BalloonProfile(
             id: UUID(),
+            itemNumber: 0,
             title: "風船",
             text: "🎈",
+            explanationText: "",
+            explanationImageDataURLs: [],
             imageName: nil,
+            imageDataURL: nil,
+            backText: "",
+            backImageName: nil,
+            backImageDataURL: nil,
+            genreName: "未分類",
+            smallCategoryName: "",
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
             positionName: "中央",
+            sizeName: "標準",
             pausesAtMiddle: false,
             middlePauseDuration: 1.0,
             isEnabled: true,
+            correctCount: 0,
+            incorrectCount: 0,
+            lastReviewedAt: nil,
             createdAt: Date()
         )
     }
@@ -329,10 +779,13 @@ final class OverlaySettings {
 
 private enum Keys {
     static let displayInterval = "displayInterval"
+    static let randomIntervalMinSeconds = "randomIntervalMinSeconds"
+    static let randomIntervalMaxSeconds = "randomIntervalMaxSeconds"
     static let climbSpeed = "climbSpeed"
     static let balloons = "balloons"
     static let activeBalloonID = "activeBalloonID"
     static let isPaused = "isPaused"
+    static let allStopSnapshotEnabledIDs = "allStopSnapshotEnabledIDs"
 }
 
 private extension String {
