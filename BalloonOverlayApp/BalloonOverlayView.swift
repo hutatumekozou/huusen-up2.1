@@ -26,6 +26,7 @@ struct BalloonOverlayView: View {
     @State private var triangleHitFrame = CGRect.zero
     @State private var explanationButtonFrame = CGRect.zero
     @State private var explanationBubbleFrame = CGRect.zero
+    @State private var explanationScrollAreaFrame = CGRect.zero
     @State private var closeButtonFrame = CGRect.zero
     @State private var correctStampFrame = CGRect.zero
     @State private var incorrectStampFrame = CGRect.zero
@@ -39,7 +40,14 @@ struct BalloonOverlayView: View {
     @State private var explanationImageFrames: [Int: CGRect] = [:]
     @State private var imagePreviewFrame = CGRect.zero
     @State private var imagePreviewCloseFrame = CGRect.zero
+    @State private var imagePreviewZoomOutFrame = CGRect.zero
+    @State private var imagePreviewZoomInFrame = CGRect.zero
     @State private var previewImage: NSImage?
+    @State private var imagePreviewZoom = 1.0
+    @State private var imagePreviewOffset = CGSize.zero
+    @State private var isImagePreviewDragging = false
+    @State private var imagePreviewDragStart = CGPoint.zero
+    @State private var imagePreviewLastOffset = CGSize.zero
     @State private var isPausedAtMiddle = false
     @State private var isShowingExplanation = false
     @State private var isShowingImagePreview = false
@@ -55,6 +63,8 @@ struct BalloonOverlayView: View {
     @State private var motionBalloonSize = 0.0
     @State private var motionContainerSize = CGSize.zero
     @State private var clickObserver: NSObjectProtocol?
+    @State private var scrollObserver: NSObjectProtocol?
+    @State private var dragObserver: NSObjectProtocol?
     @State private var answerRevision = 0
     @State private var answerFeedback: String?
     @State private var editingAnswerCount: Bool?
@@ -75,14 +85,14 @@ struct BalloonOverlayView: View {
             let hasExplanation = !explanationText.isEmpty || !balloon.explanationImageDataURLs.isEmpty
 
             ZStack {
-                balloonView(size: balloonSize, contentScale: balloon.sizeScale, balloon: balloon, isShowingBack: isShowingBack)
+                balloonView(
+                    size: balloonSize,
+                    contentScale: balloon.sizeScale,
+                    balloon: balloon,
+                    isShowingBack: isShowingBack,
+                    hasExplanation: hasExplanation
+                )
                     .position(x: centerX, y: currentY)
-
-                if hasExplanation {
-                    explanationButtonView()
-                        .frame(width: 64, height: 30)
-                        .position(x: centerX + balloonSize * 0.36, y: currentY + balloonSize * 0.34)
-                }
 
                 if isShowingExplanation {
                     explanationBubbleView(text: explanationText)
@@ -124,6 +134,14 @@ struct BalloonOverlayView: View {
             .onPreferenceChange(ExplanationImageFramePreferenceKey.self) { frames in
                 explanationImageFrames = frames
             }
+            .onPreferenceChange(ExplanationScrollAreaPreferenceKey.self) { frame in
+                explanationScrollAreaFrame = frame
+                updateInteractionFrames(centerX: centerX, centerY: currentY, size: balloonSize, containerSize: proxy.size)
+            }
+            .onPreferenceChange(ExplanationCloseButtonPreferenceKey.self) { frame in
+                closeButtonFrame = frame
+                updateInteractionFrames(centerX: centerX, centerY: currentY, size: balloonSize, containerSize: proxy.size)
+            }
             .onPreferenceChange(AnswerControlFramePreferenceKey.self) { frames in
                 correctStampFrame = frames[.correctStamp] ?? .zero
                 incorrectStampFrame = frames[.incorrectStamp] ?? .zero
@@ -141,7 +159,6 @@ struct BalloonOverlayView: View {
                 OverlayInteractionRegistry.shared.remove(screenFrame: screenFrame)
             }
         }
-        .allowsHitTesting(false)
     }
 
     private func startMotionTimer() {
@@ -200,18 +217,46 @@ struct BalloonOverlayView: View {
     }
 
     private func installClickObserver() {
-        guard clickObserver == nil else { return }
-
-        clickObserver = NotificationCenter.default.addObserver(
-            forName: .overlayClick,
-            object: nil,
-            queue: .main
-        ) { notification in
-            guard let click = notification.object as? OverlayClick,
-                  OverlayInteractionRegistry.shared.sameScreen(click.screenFrame, screenFrame) else {
-                return
+        if clickObserver == nil {
+            clickObserver = NotificationCenter.default.addObserver(
+                forName: .overlayClick,
+                object: nil,
+                queue: .main
+            ) { notification in
+                guard let click = notification.object as? OverlayClick,
+                      OverlayInteractionRegistry.shared.sameScreen(click.screenFrame, screenFrame) else {
+                    return
+                }
+                handleClick(at: click.point)
             }
-            handleClick(at: click.point)
+        }
+
+        if scrollObserver == nil {
+            scrollObserver = NotificationCenter.default.addObserver(
+                forName: .overlayScroll,
+                object: nil,
+                queue: .main
+            ) { notification in
+                guard let scroll = notification.object as? OverlayScroll,
+                      OverlayInteractionRegistry.shared.sameScreen(scroll.screenFrame, screenFrame) else {
+                    return
+                }
+                handleImagePreviewScroll(deltaX: scroll.deltaX, deltaY: scroll.deltaY)
+            }
+        }
+
+        if dragObserver == nil {
+            dragObserver = NotificationCenter.default.addObserver(
+                forName: .overlayDrag,
+                object: nil,
+                queue: .main
+            ) { notification in
+                guard let drag = notification.object as? OverlayDrag,
+                      OverlayInteractionRegistry.shared.sameScreen(drag.screenFrame, screenFrame) else {
+                    return
+                }
+                handleImagePreviewDrag(drag)
+            }
         }
     }
 
@@ -220,12 +265,43 @@ struct BalloonOverlayView: View {
             NotificationCenter.default.removeObserver(clickObserver)
             self.clickObserver = nil
         }
+        if let scrollObserver {
+            NotificationCenter.default.removeObserver(scrollObserver)
+            self.scrollObserver = nil
+        }
+        if let dragObserver {
+            NotificationCenter.default.removeObserver(dragObserver)
+            self.dragObserver = nil
+        }
     }
 
     private func handleClick(at localPoint: CGPoint) {
         if isShowingImagePreview {
-            isShowingImagePreview = false
-            previewImage = nil
+            if imagePreviewZoomOutFrame.contains(localPoint) {
+                imagePreviewZoom = max(1.0, imagePreviewZoom - 0.15)
+                if imagePreviewZoom <= 1 {
+                    imagePreviewOffset = .zero
+                    imagePreviewLastOffset = .zero
+                } else {
+                    imagePreviewOffset = clampedImagePreviewOffset(imagePreviewOffset)
+                    imagePreviewLastOffset = imagePreviewOffset
+                }
+                return
+            }
+            if imagePreviewZoomInFrame.contains(localPoint) {
+                imagePreviewZoom = min(3.0, imagePreviewZoom + 0.15)
+                imagePreviewOffset = clampedImagePreviewOffset(imagePreviewOffset)
+                imagePreviewLastOffset = imagePreviewOffset
+                return
+            }
+            if imagePreviewCloseFrame.contains(localPoint) {
+                isShowingImagePreview = false
+                previewImage = nil
+                imagePreviewZoom = 1.0
+                imagePreviewOffset = .zero
+                imagePreviewLastOffset = .zero
+                isImagePreviewDragging = false
+            }
             return
         }
 
@@ -277,6 +353,10 @@ struct BalloonOverlayView: View {
             }
             if let image = explanationImage(at: localPoint) {
                 previewImage = image
+                imagePreviewZoom = 1.0
+                imagePreviewOffset = .zero
+                imagePreviewLastOffset = .zero
+                isImagePreviewDragging = false
                 isShowingImagePreview = true
             }
             return
@@ -297,6 +377,10 @@ struct BalloonOverlayView: View {
 
         if imageHitFrame.contains(localPoint), let image = activeDisplayImage(for: settings.activeBalloon) {
             previewImage = image
+            imagePreviewZoom = 1.0
+            imagePreviewOffset = .zero
+            imagePreviewLastOffset = .zero
+            isImagePreviewDragging = false
             isShowingImagePreview = true
             middlePauseRemaining = max(middlePauseRemaining ?? 0, 6)
             isPausedAtMiddle = true
@@ -315,6 +399,58 @@ struct BalloonOverlayView: View {
         }
     }
 
+    private func handleImagePreviewScroll(deltaX: CGFloat, deltaY: CGFloat) {
+        guard isShowingImagePreview, imagePreviewZoom > 1 else { return }
+
+        let nextOffset = CGSize(
+            width: imagePreviewOffset.width - deltaX,
+            height: imagePreviewOffset.height + deltaY
+        )
+        imagePreviewOffset = clampedImagePreviewOffset(nextOffset)
+        imagePreviewLastOffset = imagePreviewOffset
+    }
+
+    private func handleImagePreviewDrag(_ drag: OverlayDrag) {
+        guard isShowingImagePreview, imagePreviewZoom > 1 else {
+            isImagePreviewDragging = false
+            return
+        }
+
+        switch drag.phase {
+        case .began:
+            guard !imagePreviewCloseFrame.contains(drag.point),
+                  !imagePreviewZoomOutFrame.contains(drag.point),
+                  !imagePreviewZoomInFrame.contains(drag.point) else {
+                isImagePreviewDragging = false
+                return
+            }
+            isImagePreviewDragging = true
+            imagePreviewDragStart = drag.point
+            imagePreviewLastOffset = imagePreviewOffset
+        case .changed:
+            guard isImagePreviewDragging else { return }
+            let nextOffset = CGSize(
+                width: imagePreviewLastOffset.width + drag.point.x - imagePreviewDragStart.x,
+                height: imagePreviewLastOffset.height + drag.point.y - imagePreviewDragStart.y
+            )
+            imagePreviewOffset = clampedImagePreviewOffset(nextOffset)
+        case .ended, .cancelled:
+            isImagePreviewDragging = false
+            imagePreviewLastOffset = imagePreviewOffset
+        }
+    }
+
+    private func clampedImagePreviewOffset(_ offset: CGSize) -> CGSize {
+        let overflow = max(0, imagePreviewZoom - 1)
+        let maxX = imagePreviewFrame.width * overflow * 0.55
+        let maxY = imagePreviewFrame.height * overflow * 0.55
+
+        return CGSize(
+            width: min(max(offset.width, -maxX), maxX),
+            height: min(max(offset.height, -maxY), maxY)
+        )
+    }
+
     private func updateInteractionFrames(centerX: Double, centerY: Double, size: Double, containerSize: CGSize) {
         let hitWidth = size * 1.15
         let hitHeight = size * 1.75
@@ -331,13 +467,23 @@ struct BalloonOverlayView: View {
             width: size * 0.82,
             height: size * 0.82
         )
-        let badgeWidth = max(64, 62 * settings.activeBalloon.sizeScale)
-        let badgeHeight = max(28, 28 * settings.activeBalloon.sizeScale)
+        let badgeWidth = max(45, 43 * settings.activeBalloon.sizeScale)
+        let badgeHeight = max(20, 20 * settings.activeBalloon.sizeScale)
+        let explanationWidth = 64.0
+        let explanationHeight = 30.0
+        let badgeGap = 4.0
+        let hasBackBadge = settings.activeBalloon.hasBackSide
+        let hasExplanationButton = settings.activeBalloon.hasExplanation
+        let badgeRowWidth = (hasBackBadge ? badgeWidth : 0)
+            + (hasBackBadge && hasExplanationButton ? badgeGap : 0)
+            + (hasExplanationButton ? explanationWidth : 0)
+        let badgeRowCenterY = circleCenterY - size * 0.38
+        let badgeRowMinX = centerX - badgeRowWidth / 2
         backBadgeFrame = CGRect(
-            x: centerX - badgeWidth / 2,
-            y: circleCenterY - size * 0.38 - badgeHeight / 2,
-            width: badgeWidth,
-            height: badgeHeight
+            x: hasBackBadge ? badgeRowMinX : 0,
+            y: hasBackBadge ? badgeRowCenterY - badgeHeight / 2 : 0,
+            width: hasBackBadge ? badgeWidth : 0,
+            height: hasBackBadge ? badgeHeight : 0
         )
         triangleHitFrame = CGRect(
             x: centerX - size * 0.18,
@@ -347,14 +493,14 @@ struct BalloonOverlayView: View {
         )
 
         explanationButtonFrame = CGRect(
-            x: centerX + size * 0.36 - 32,
-            y: centerY + size * 0.34 - 15,
-            width: 64,
-            height: 30
+            x: hasExplanationButton ? badgeRowMinX + (hasBackBadge ? badgeWidth + badgeGap : 0) : 0,
+            y: hasExplanationButton ? badgeRowCenterY - explanationHeight / 2 : 0,
+            width: hasExplanationButton ? explanationWidth : 0,
+            height: hasExplanationButton ? explanationHeight : 0
         )
 
-        let bubbleWidth = min(max(containerSize.width * 0.68, 520), 900)
-        let bubbleHeight = min(max(containerSize.height * 0.52, 360), 620)
+        let bubbleWidth = min(max(containerSize.width * 0.76, 520), min(1200, containerSize.width - 40))
+        let bubbleHeight = min(max(containerSize.height * 0.90, 360), containerSize.height - 40)
         let bubbleX = min(max(centerX + size * 0.62 + bubbleWidth / 2, bubbleWidth / 2 + 20), containerSize.width - bubbleWidth / 2 - 20)
         let bubbleY = min(max(centerY - size * 0.12, bubbleHeight / 2 + 20), containerSize.height - bubbleHeight / 2 - 20)
         explanationBubbleFrame = CGRect(
@@ -400,7 +546,19 @@ struct BalloonOverlayView: View {
             x: imagePreviewFrame.maxX - 94,
             y: imagePreviewFrame.minY + 16,
             width: 74,
-            height: 32
+            height: 48
+        )
+        imagePreviewZoomInFrame = CGRect(
+            x: imagePreviewCloseFrame.minX - 58,
+            y: imagePreviewFrame.minY + 16,
+            width: 48,
+            height: 48
+        )
+        imagePreviewZoomOutFrame = CGRect(
+            x: imagePreviewZoomInFrame.minX - 58,
+            y: imagePreviewFrame.minY + 16,
+            width: 48,
+            height: 48
         )
 
         OverlayInteractionRegistry.shared.update(
@@ -412,6 +570,7 @@ struct BalloonOverlayView: View {
                 triangle: triangleHitFrame,
                 explanationButton: explanationButtonFrame,
                 explanationBubble: explanationBubbleFrame,
+                explanationScrollArea: explanationScrollAreaFrame,
                 explanationCloseButton: closeButtonFrame,
                 imagePreview: imagePreviewFrame,
                 isShowingExplanation: isShowingExplanation,
@@ -493,9 +652,9 @@ struct BalloonOverlayView: View {
         return OverlaySettings.positionOptions.first(where: { $0.name == balloon.positionName })?.ratio ?? 0.5
     }
 
-    private func explanationButtonView() -> some View {
+    private func explanationButtonView(contentScale: Double = 1) -> some View {
         Text("解説")
-            .font(.system(size: 13, weight: .bold))
+            .font(.system(size: max(12, 13 * contentScale), weight: .bold))
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black.opacity(0.72))
@@ -514,50 +673,101 @@ struct BalloonOverlayView: View {
         let reviewText = balloon.lastReviewedAt.map { "前回の更新時: \(formatReviewTimestamp($0))" } ?? "前回の更新時: 未保存"
         let _ = answerRevision
 
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("解説")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.black)
+        return VStack(alignment: .leading, spacing: 0) {
+            explanationHeader()
+                .fixedSize(horizontal: false, vertical: true)
 
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 14) {
-                    if !text.isEmpty {
-                        Text(text)
-                            .font(.system(size: bodyFontSize, weight: .medium))
-                            .foregroundStyle(Color.black.opacity(0.84))
-                            .lineSpacing(6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+            explanationScrollableContent(text: text, bodyFontSize: bodyFontSize, images: images)
+                .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                .layoutPriority(1)
 
-                    if !images.isEmpty {
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            ForEach(Array(images.enumerated()), id: \.offset) { index, image in
-                                Image(nsImage: image)
-                                    .resizable()
-                                    .interpolation(.high)
-                                    .scaledToFit()
-                                    .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 220)
-                                    .padding(8)
-                                    .background(Color.black.opacity(0.04))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.black.opacity(0.10), lineWidth: 1))
-                                    .background(
-                                        GeometryReader { geometry in
-                                            Color.clear.preference(
-                                                key: ExplanationImageFramePreferenceKey.self,
-                                                value: [index: geometry.frame(in: .named("overlayRoot"))]
-                                            )
-                                        }
-                                    )
-                            }
+            explanationFooter(
+                correctCount: correctCount,
+                incorrectCount: incorrectCount,
+                reviewText: reviewText,
+                showsAnswerControls: showsAnswerControls
+            )
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.black.opacity(0.15), lineWidth: 1))
+        .shadow(color: .black.opacity(0.24), radius: 16, x: 0, y: 8)
+    }
+
+    private func explanationHeader() -> some View {
+        Text("解説")
+            .font(.system(size: 18, weight: .bold))
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+    }
+
+    private func explanationScrollableContent(text: String, bodyFontSize: CGFloat, images: [NSImage]) -> some View {
+        StandardScrollbarScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if !text.isEmpty {
+                    Text(text)
+                        .font(.system(size: bodyFontSize, weight: .medium))
+                        .foregroundStyle(Color.black.opacity(0.84))
+                        .lineSpacing(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !images.isEmpty {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+                            Image(nsImage: image)
+                                .resizable()
+                                .interpolation(.high)
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 220)
+                                .padding(8)
+                                .background(Color.black.opacity(0.04))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.black.opacity(0.10), lineWidth: 1))
+                                .background(
+                                    GeometryReader { geometry in
+                                        Color.clear.preference(
+                                            key: ExplanationImageFramePreferenceKey.self,
+                                            value: [index: geometry.frame(in: .named("overlayRoot"))]
+                                        )
+                                    }
+                                )
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.trailing, 12)
+            .padding(.bottom, 18)
+        }
+        .accessibilityIdentifier("explanation-scroll-body")
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+        .clipped()
+        .background(
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: ExplanationScrollAreaPreferenceKey.self,
+                    value: geometry.frame(in: .named("overlayRoot"))
+                )
+            }
+        )
+    }
 
+    private func explanationFooter(
+        correctCount: Int,
+        incorrectCount: Int,
+        reviewText: String,
+        showsAnswerControls: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             if showsAnswerControls {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 12) {
@@ -616,13 +826,21 @@ struct BalloonOverlayView: View {
                     .frame(width: 74, height: 32)
                     .background(Color.black.opacity(0.78))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: ExplanationCloseButtonPreferenceKey.self,
+                                value: geometry.frame(in: .named("overlayRoot"))
+                            )
+                        }
+                    )
             }
         }
-        .padding(18)
+        .padding(.horizontal, 18)
+        .padding(.top, 12)
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.black.opacity(0.15), lineWidth: 1))
-        .shadow(color: .black.opacity(0.24), radius: 16, x: 0, y: 8)
     }
 
     private func answerStampView(face: String, title: String, subtitle: String, tint: Color, isEditing: Bool, isCorrect: Bool) -> some View {
@@ -717,21 +935,54 @@ struct BalloonOverlayView: View {
                 .resizable()
                 .interpolation(.high)
                 .scaledToFit()
-                .padding(28)
+                .scaleEffect(imagePreviewZoom)
+                .offset(imagePreviewOffset)
+                .padding(.leading, 28)
+                .padding(.vertical, 28)
+                .padding(.trailing, 148)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
 
-            Text("閉じる")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 74, height: 32)
-                .background(Color.white.opacity(0.18))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.5), lineWidth: 1))
+            HStack(spacing: 10) {
+                previewZoomButton(symbol: "-")
+                previewZoomButton(symbol: "+")
+                Text("閉じる")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 74, height: 32)
+                    .background(Color.white.opacity(0.18))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.5), lineWidth: 1))
+            }
                 .padding(.top, 16)
                 .padding(.trailing, 20)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.28), lineWidth: 1))
         .shadow(color: .black.opacity(0.34), radius: 22, x: 0, y: 10)
+    }
+
+    private func previewZoomButton(symbol: String) -> some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.92), lineWidth: 4)
+                .frame(width: 31, height: 31)
+                .overlay(
+                    Rectangle()
+                        .fill(Color.white.opacity(0.92))
+                        .frame(width: 18, height: 5)
+                        .clipShape(Capsule())
+                        .rotationEffect(.degrees(45))
+                        .offset(x: 16, y: 16)
+                )
+
+            Text(symbol)
+                .font(.system(size: 29, weight: .heavy))
+                .foregroundStyle(.white)
+                .offset(x: -1, y: -2)
+        }
+        .frame(width: 48, height: 48)
+        .contentShape(Rectangle())
     }
 
     private func activeDisplayImage(for balloon: BalloonProfile) -> NSImage? {
@@ -742,7 +993,13 @@ struct BalloonOverlayView: View {
         return balloon.attachedImage ?? balloon.assetImage
     }
 
-    private func balloonView(size: Double, contentScale: Double, balloon: BalloonProfile, isShowingBack: Bool) -> some View {
+    private func balloonView(
+        size: Double,
+        contentScale: Double,
+        balloon: BalloonProfile,
+        isShowingBack: Bool,
+        hasExplanation: Bool
+    ) -> some View {
         VStack(spacing: 0) {
             ZStack {
                 Circle()
@@ -768,16 +1025,23 @@ struct BalloonOverlayView: View {
                     .frame(width: size * 0.82, height: size * 0.82)
                     .clipShape(Circle())
 
-                if balloon.hasBackSide {
-                    Text(isShowingBack ? "表へ" : "裏あり")
-                        .font(.system(size: max(10, 10 * contentScale), weight: .bold))
-                        .foregroundStyle(.black.opacity(0.82))
-                        .padding(.horizontal, max(6, 6 * contentScale))
-                        .padding(.vertical, max(3, 3 * contentScale))
-                        .background(Color.white.opacity(0.92))
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(Color.black.opacity(0.14), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.16), radius: 3, x: 0, y: 1)
+                if balloon.hasBackSide || hasExplanation {
+                    HStack(spacing: 4) {
+                        if balloon.hasBackSide {
+                            Text(isShowingBack ? "表へ" : "裏あり")
+                                .font(.system(size: max(8, 8 * contentScale), weight: .bold))
+                                .foregroundStyle(.black.opacity(0.82))
+                                .frame(width: max(45, 43 * contentScale), height: max(20, 20 * contentScale))
+                                .background(Color.white.opacity(0.92))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color.black.opacity(0.14), lineWidth: 1))
+                                .shadow(color: .black.opacity(0.16), radius: 3, x: 0, y: 1)
+                        }
+                        if hasExplanation {
+                            explanationButtonView(contentScale: contentScale)
+                                .frame(width: 64, height: 30)
+                        }
+                    }
                         .offset(x: 0, y: -size * 0.38)
                 }
             }
@@ -818,15 +1082,16 @@ struct BalloonOverlayView: View {
 
         if let image = attachedImage {
             let hasBackBadge = balloon.hasBackSide
+            let captionLineCount = imageCaption.map { max(1, $0.components(separatedBy: .newlines).count) } ?? 0
             let captionWidth = contentSize * 0.88
-            let captionHeight = contentSize * (hasBackBadge ? 0.20 : 0.24)
+            let captionHeight = contentSize * (captionLineCount > 2 ? 0.32 : (hasBackBadge ? 0.20 : 0.24))
             let topInset = contentSize * (hasBackBadge ? 0.16 : 0.02)
             VStack(spacing: max(3, 4 * contentScale)) {
                 if let imageCaption {
                     Text(imageCaption)
-                        .font(.system(size: imageCaptionSize(for: imageCaption, width: captionWidth, height: captionHeight, contentScale: contentScale), weight: .bold))
+                        .font(.system(size: imageCaptionSize(for: imageCaption, balloon: balloon, contentSize: contentSize, width: captionWidth, height: captionHeight, contentScale: contentScale), weight: .bold))
                         .minimumScaleFactor(0.25)
-                        .lineLimit(2)
+                        .lineLimit(5)
                         .allowsTightening(true)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white)
@@ -840,7 +1105,7 @@ struct BalloonOverlayView: View {
                     .scaledToFit()
                     .frame(
                         maxWidth: contentSize * 0.82,
-                        maxHeight: contentSize * (imageCaption == nil ? 0.82 : (hasBackBadge ? 0.54 : 0.62))
+                        maxHeight: contentSize * (imageCaption == nil ? 0.82 : (captionLineCount > 2 ? 0.48 : (hasBackBadge ? 0.54 : 0.62)))
                     )
                 Spacer(minLength: 0)
             }
@@ -855,7 +1120,7 @@ struct BalloonOverlayView: View {
                 .padding(imagePadding(for: contentScale))
         } else {
             Text(text)
-                .font(.system(size: textSize(for: text, contentSize: contentSize, contentScale: contentScale), weight: .bold))
+                .font(.system(size: textSize(for: text, balloon: balloon, contentSize: contentSize, contentScale: contentScale), weight: .bold))
                 .minimumScaleFactor(0.2)
                 .lineLimit(8)
                 .allowsTightening(true)
@@ -869,7 +1134,11 @@ struct BalloonOverlayView: View {
         contentScale > 1 ? 0 : 4
     }
 
-    private func imageCaptionSize(for text: String, width: Double, height: Double, contentScale: Double) -> Double {
+    private func imageCaptionSize(for text: String, balloon: BalloonProfile, contentSize: Double, width: Double, height: Double, contentScale: Double) -> Double {
+        if balloon.imageCaptionFontSize > 0 {
+            return min(max(balloon.imageCaptionFontSize * contentScale * livePreviewScale(for: contentSize), 8), 140 * contentScale)
+        }
+
         let maximumSize = min(24 * contentScale, height * 0.44)
         let minimumSize = max(8, 8 * contentScale)
 
@@ -887,7 +1156,11 @@ struct BalloonOverlayView: View {
         return low
     }
 
-    private func textSize(for text: String, contentSize: Double, contentScale: Double) -> Double {
+    private func textSize(for text: String, balloon: BalloonProfile, contentSize: Double, contentScale: Double) -> Double {
+        if balloon.textFontSize > 0 {
+            return min(max(balloon.textFontSize * contentScale * livePreviewScale(for: contentSize), 8), 140 * contentScale)
+        }
+
         let lineCountBudget = max(4, min(8, Int(ceil(Double(text.count) / 7.0))))
         let maximumSize = min(34 * contentScale, contentSize / Double(lineCountBudget) * 0.62)
         let minimumSize = max(14, 12 * contentScale)
@@ -905,6 +1178,111 @@ struct BalloonOverlayView: View {
         }
 
         return low
+    }
+
+    private func livePreviewScale(for contentSize: Double) -> Double {
+        max(1, contentSize / 192)
+    }
+}
+
+private struct StandardScrollbarScrollView<Content: View>: NSViewRepresentable {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> StandardScrollbarNSScrollView {
+        let scrollView = StandardScrollbarNSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = false
+        scrollView.scrollerStyle = .legacy
+        scrollView.scrollerKnobStyle = .dark
+        scrollView.verticalScroller = VisibleDragScroller()
+        scrollView.verticalScrollElasticity = .allowed
+
+        let hostingView = NSHostingView(rootView: content)
+        hostingView.translatesAutoresizingMaskIntoConstraints = true
+        scrollView.documentView = hostingView
+        scrollView.onLayout = { [weak scrollView, weak hostingView] in
+            guard let scrollView, let hostingView else { return }
+            Self.resizeDocument(in: scrollView, hostingView: hostingView, scrollToTop: false)
+        }
+        context.coordinator.hostingView = hostingView
+
+        DispatchQueue.main.async {
+            Self.resizeDocument(in: scrollView, hostingView: hostingView, scrollToTop: true)
+        }
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: StandardScrollbarNSScrollView, context: Context) {
+        guard let hostingView = context.coordinator.hostingView else { return }
+        hostingView.rootView = content
+
+        DispatchQueue.main.async {
+            Self.resizeDocument(in: scrollView, hostingView: hostingView, scrollToTop: false)
+        }
+    }
+
+    private static func resizeDocument(in scrollView: NSScrollView, hostingView: NSHostingView<Content>, scrollToTop: Bool) {
+        let scrollerWidth = scrollView.verticalScroller?.frame.width ?? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+        let width = max(1, scrollView.contentView.bounds.width - scrollerWidth)
+        hostingView.frame.size = NSSize(width: width, height: 10_000)
+
+        let fittingSize = hostingView.fittingSize
+        let height = max(scrollView.contentView.bounds.height, fittingSize.height)
+        hostingView.frame = NSRect(x: 0, y: 0, width: width, height: height)
+
+        if scrollToTop {
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+    }
+
+    final class Coordinator {
+        var hostingView: NSHostingView<Content>?
+    }
+}
+
+private final class StandardScrollbarNSScrollView: NSScrollView {
+    var onLayout: (() -> Void)?
+
+    override func layout() {
+        super.layout()
+        onLayout?()
+    }
+}
+
+private final class VisibleDragScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool {
+        false
+    }
+
+    override var controlSize: NSControl.ControlSize {
+        get { .regular }
+        set { }
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
+        NSColor(calibratedWhite: 0.88, alpha: 1).setFill()
+        NSBezierPath(roundedRect: slotRect.insetBy(dx: 4, dy: 0), xRadius: 6, yRadius: 6).fill()
+    }
+
+    override func drawKnob() {
+        let knobRect = rect(for: .knob).insetBy(dx: 4, dy: 2)
+        guard knobRect.height > 0 else { return }
+
+        NSColor(calibratedWhite: 0.08, alpha: 1).setFill()
+        NSBezierPath(roundedRect: knobRect, xRadius: 5, yRadius: 5).fill()
     }
 }
 
@@ -952,6 +1330,22 @@ private struct ExplanationImageFramePreferenceKey: PreferenceKey {
 
     static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private struct ExplanationScrollAreaPreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+private struct ExplanationCloseButtonPreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }
 

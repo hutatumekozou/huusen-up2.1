@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             defer { self.startTimer() }
             guard !self.settings.isPaused, self.settings.hasEnabledBalloons else { return }
+            guard !self.overlayController.isShowing else { return }
             self.settings.activateNextEnabledBalloon()
             self.overlayController.show()
         }

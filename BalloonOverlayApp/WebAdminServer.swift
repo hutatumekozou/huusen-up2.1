@@ -161,7 +161,13 @@ final class WebAdminServer {
                     editGenreName: path.query["editGenreName"],
                     editSmallCategoryGenreName: path.query["editSmallCategoryGenreName"],
                     editSmallCategoryName: path.query["editSmallCategoryName"],
-                    itemNumberSearch: path.query["itemNumberSearch"]
+                    itemNumberSearch: path.query["itemNumberSearch"],
+                    listSort: path.query["listSort"],
+                    listGenreFilter: path.query["listGenreFilter"],
+                    listSmallCategoryFilter: path.query["listSmallCategoryFilter"],
+                    listFavoriteFilter: path.query["listFavoriteFilter"],
+                    returnTo: path.query["returnTo"],
+                    returnScrollY: path.query["returnScrollY"]
                 )
             )
         case "/show":
@@ -204,6 +210,15 @@ final class WebAdminServer {
                 let isEnabled = path.query["enabled"] == "1"
                 DispatchQueue.main.async {
                     self.settings.setBalloonEnabled(id: id, isEnabled: isEnabled)
+                    self.settingsChanged()
+                }
+            }
+            return redirect(to: "/?tab=list&message=updated")
+        case "/toggle-favorite":
+            if let id = path.query["id"].flatMap(UUID.init(uuidString:)) {
+                let isFavorite = path.query["favorite"] == "1"
+                DispatchQueue.main.async {
+                    self.settings.setBalloonFavorite(id: id, isFavorite: isFavorite)
                     self.settingsChanged()
                 }
             }
@@ -313,6 +328,8 @@ final class WebAdminServer {
                         backText: query["backText"] ?? "",
                         backImageName: query["backImageName"],
                         backImageDataURL: backImageDataURL,
+                        textFontSize: query.doubleValue(for: "textFontSize", fallback: 0),
+                        imageCaptionFontSize: query.doubleValue(for: "imageCaptionFontSize", fallback: 0),
                         genreName: genreName,
                         smallCategoryName: smallCategoryName,
                         colorName: query["colorName"] ?? OverlaySettings.colorOptions[0].name,
@@ -332,6 +349,8 @@ final class WebAdminServer {
                         backText: query["backText"] ?? "",
                         backImageName: query["backImageName"],
                         backImageDataURL: backImageDataURL,
+                        textFontSize: query.doubleValue(for: "textFontSize", fallback: 0),
+                        imageCaptionFontSize: query.doubleValue(for: "imageCaptionFontSize", fallback: 0),
                         genreName: genreName,
                         smallCategoryName: smallCategoryName,
                         colorName: query["colorName"] ?? OverlaySettings.colorOptions[0].name,
@@ -343,10 +362,41 @@ final class WebAdminServer {
                 }
                 self.settingsChanged()
             }
-            return redirect(to: "/?tab=list&message=saved")
+            return redirect(to: saveRedirectPath(from: query))
         default:
             return httpResponse(status: "404 Not Found", body: "Not Found")
         }
+    }
+
+    private func saveRedirectPath(from query: [String: String]) -> String {
+        guard query["id"].flatMap(UUID.init(uuidString:)) != nil,
+              let returnTo = query["returnTo"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              returnTo.hasPrefix("/") else {
+            return "/?tab=list&message=saved"
+        }
+
+        return appendingQueryItems(
+            to: returnTo,
+            items: [
+                URLQueryItem(name: "message", value: "saved"),
+                URLQueryItem(name: "restoreScrollY", value: query["returnScrollY"] ?? "0")
+            ]
+        )
+    }
+
+    private func appendingQueryItems(to path: String, items: [URLQueryItem]) -> String {
+        var components = URLComponents()
+        components.percentEncodedPath = path.components(separatedBy: "?").first ?? "/"
+        if let query = path.components(separatedBy: "?").dropFirst().first {
+            components.percentEncodedQuery = query
+        }
+
+        var queryItems = (components.queryItems ?? []).filter { existingItem in
+            !items.contains(where: { $0.name == existingItem.name })
+        }
+        queryItems.append(contentsOf: items)
+        components.queryItems = queryItems
+        return components.string ?? path
     }
 
     private func requestPath(from request: String) -> (path: String, query: [String: String]) {
@@ -431,7 +481,13 @@ final class WebAdminServer {
         editGenreName: String?,
         editSmallCategoryGenreName: String?,
         editSmallCategoryName: String?,
-        itemNumberSearch: String?
+        itemNumberSearch: String?,
+        listSort: String?,
+        listGenreFilter: String?,
+        listSmallCategoryFilter: String?,
+        listFavoriteFilter: String?,
+        returnTo: String?,
+        returnScrollY: String?
     ) -> String {
         let intervalMinutes = String(format: "%.1f", settings.displayInterval / 60)
         let randomIntervalMinSeconds = String(format: "%.0f", settings.randomIntervalMinSeconds)
@@ -458,7 +514,13 @@ final class WebAdminServer {
         let createTabClass = selectedTab == "create" ? "tab active" : "tab"
         let listTabClass = selectedTab == "list" ? "tab active" : "tab"
         let tabContent = selectedTab == "list"
-            ? renderListPanel(itemNumberSearch: itemNumberSearch)
+            ? renderListPanel(
+                itemNumberSearch: itemNumberSearch,
+                listSort: listSort,
+                genreFilter: listGenreFilter,
+                smallCategoryFilter: listSmallCategoryFilter,
+                favoriteFilter: listFavoriteFilter
+            )
             : renderCreatePanel(
                 intervalMinutes: intervalMinutes,
                 randomIntervalMinSeconds: randomIntervalMinSeconds,
@@ -477,7 +539,9 @@ final class WebAdminServer {
                 sizeOptions: sizeOptions,
                 editGenreName: editGenreName,
                 editSmallCategoryGenreName: editSmallCategoryGenreName,
-                editSmallCategoryName: editSmallCategoryName
+                editSmallCategoryName: editSmallCategoryName,
+                returnTo: returnTo,
+                returnScrollY: returnScrollY
             )
 
         return """
@@ -595,20 +659,24 @@ final class WebAdminServer {
             .preview-body {
               width: 96px;
               height: 96px;
-              display: grid;
-              place-items: center;
+              display: flex;
+              align-items: center;
+              justify-content: center;
               border-radius: 50%;
               background: linear-gradient(135deg, \(formBalloon.colorStartHex), \(formBalloon.colorEndHex));
               color: white;
-              font-size: 26px;
+              font-size: \(previewTextFontSize(for: formBalloon, large: false))px;
               font-weight: 700;
               overflow: hidden;
+              text-align: center;
+              white-space: pre-wrap;
+              line-height: 1.15;
               box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
             }
             .preview-balloon.large .preview-body {
               width: 192px;
               height: 192px;
-              font-size: 78px;
+              font-size: \(previewTextFontSize(for: formBalloon, large: true))px;
             }
             .preview-image-stack {
               display: grid;
@@ -621,14 +689,15 @@ final class WebAdminServer {
             .preview-image-caption {
               max-width: 100%;
               color: white;
-              font-size: 12px;
+              font-size: \(previewImageCaptionFontSize(for: formBalloon, large: false))px;
               line-height: 1.1;
               text-align: center;
               overflow: hidden;
-              display: -webkit-box;
-              -webkit-box-orient: vertical;
-              -webkit-line-clamp: 2;
+              white-space: pre-wrap;
               text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+            }
+            .preview-balloon.large .preview-image-caption {
+              font-size: \(previewImageCaptionFontSize(for: formBalloon, large: true))px;
             }
             .preview-body img {
               display: block;
@@ -748,15 +817,45 @@ final class WebAdminServer {
               border-radius: 6px;
               background: #f7f9fc;
             }
+            .attachment-image-item.attached,
+            .explanation-image-item.attached {
+              border-color: #f4a8c8;
+              background: #fff0f6;
+            }
+            .attachment-image-title,
             .explanation-image-title {
               display: flex;
+              align-items: center;
               justify-content: space-between;
               gap: 8px;
               font-weight: 700;
             }
+            .attachment-image-title-actions,
+            .explanation-image-title-actions {
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+              margin-left: auto;
+            }
+            .attachment-image-title small,
             .explanation-image-title small {
               color: #5f6368;
               font-weight: 600;
+            }
+            .attachment-image-item.attached small,
+            .explanation-image-item.attached small {
+              color: #c2185b;
+            }
+            .image-check-button {
+              min-height: 28px;
+              padding: 4px 10px;
+              font-size: 12px;
+              font-weight: 700;
+            }
+            .image-check-button[disabled] {
+              color: #9aa0a6;
+              background: #f3f4f6;
+              cursor: default;
             }
             .explanation-image-item input[type="file"] {
               height: auto;
@@ -851,6 +950,146 @@ final class WebAdminServer {
               font-family: inherit;
               line-height: 1.5;
             }
+            textarea.compact {
+              min-height: 74px;
+            }
+            .font-controls {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 10px;
+            }
+            .font-control {
+              display: grid;
+              gap: 8px;
+            }
+            .font-control-head {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 8px;
+              color: #3c4043;
+              font-size: 13px;
+            }
+            .font-size-display {
+              color: #5f6368;
+              font-size: 12px;
+              font-weight: 700;
+            }
+            .font-step-row {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+            .font-step {
+              position: relative;
+              width: 48px;
+              height: 48px;
+              padding: 0;
+              border: 0;
+              background: transparent;
+            }
+            .font-step::before {
+              content: "";
+              position: absolute;
+              left: 4px;
+              top: 4px;
+              width: 31px;
+              height: 31px;
+              border: 5px solid #111;
+              border-radius: 50%;
+            }
+            .font-step::after {
+              content: "";
+              position: absolute;
+              left: 32px;
+              top: 32px;
+              width: 18px;
+              height: 6px;
+              border-radius: 999px;
+              background: #111;
+              transform: rotate(45deg);
+              transform-origin: left center;
+            }
+            .font-step span {
+              position: absolute;
+              left: 10px;
+              top: 8px;
+              width: 22px;
+              height: 22px;
+              display: grid;
+              place-items: center;
+              color: #111;
+              font-size: 31px;
+              font-weight: 900;
+              line-height: 1;
+            }
+            .font-auto {
+              height: 34px;
+              padding: 0 12px;
+              font-size: 13px;
+            }
+            .attachment-preview-modal {
+              position: fixed;
+              inset: 0;
+              z-index: 1000;
+              display: none;
+              align-items: center;
+              justify-content: center;
+              padding: 24px;
+              background: rgba(0, 0, 0, 0.62);
+            }
+            .attachment-preview-modal.open {
+              display: flex;
+            }
+            .attachment-preview-panel {
+              width: min(760px, 94vw);
+              max-height: 90vh;
+              display: grid;
+              grid-template-rows: auto minmax(0, 1fr) auto;
+              gap: 14px;
+              padding: 18px;
+              border-radius: 10px;
+              background: #fff;
+              box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+            }
+            .attachment-preview-head {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 16px;
+            }
+            .attachment-preview-head h3 {
+              margin: 0;
+              font-size: 18px;
+            }
+            .attachment-preview-filename {
+              margin: 6px 0 0;
+              color: #5f6368;
+              font-size: 13px;
+              overflow-wrap: anywhere;
+            }
+            .attachment-preview-body {
+              min-height: 220px;
+              display: grid;
+              place-items: center;
+              overflow: hidden;
+              border: 1px solid #d9dde5;
+              border-radius: 8px;
+              background: #f7f9fc;
+            }
+            .attachment-preview-body img {
+              display: block;
+              max-width: 100%;
+              max-height: 62vh;
+              object-fit: contain;
+            }
+            .attachment-preview-actions {
+              display: flex;
+              justify-content: flex-end;
+            }
+            .attachment-preview-close {
+              min-width: 120px;
+            }
             input[type="checkbox"] {
               width: 18px;
               height: 18px;
@@ -923,6 +1162,50 @@ final class WebAdminServer {
               display: grid;
               gap: 10px;
             }
+            .small-category-group {
+              display: grid;
+              gap: 10px;
+            }
+            .small-category-heading {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 10px;
+              margin-top: 8px;
+              padding: 8px 12px;
+              border-radius: 8px;
+              background: #efffdd;
+              border: 1px solid #ccefb0;
+            }
+            .small-category-heading.resale {
+              background: #eef7ff;
+              border-color: #b8daf7;
+            }
+            .small-category-heading.resale-ladies {
+              background: #fff0f6;
+              border-color: #f4a8c8;
+            }
+            .small-category-heading.resale-other {
+              background: #f0fff4;
+              border-color: #bbf7d0;
+            }
+            .small-category-heading.simple-rule {
+              background: #f3f4f6;
+              border-color: #d1d5db;
+            }
+            .small-category-heading.mind-dlab {
+              background: #f3e8ff;
+              border-color: #c084fc;
+            }
+            .small-category-heading h4 {
+              margin: 0;
+              font-size: 14px;
+            }
+            .small-category-count {
+              color: #5f6368;
+              font-size: 12px;
+              white-space: nowrap;
+            }
             .genre-heading {
               display: flex;
               align-items: center;
@@ -934,6 +1217,19 @@ final class WebAdminServer {
             .genre-heading h3 {
               margin: 0;
               font-size: 16px;
+            }
+            .genre-title-pill {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 42px;
+              padding: 0 18px;
+              border: 1px solid #111;
+              border-radius: 8px;
+              background: #111;
+              color: #fff;
+              font-weight: 800;
+              line-height: 1.2;
             }
             .genre-count {
               color: #5f6368;
@@ -1023,6 +1319,24 @@ final class WebAdminServer {
               background: #eef0f3;
               color: #5f6368;
             }
+            .favorite-button {
+              width: 42px;
+              min-width: 42px;
+              height: 36px;
+              padding: 0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 22px;
+              line-height: 1;
+              color: #9ca3af;
+              border-color: #d1d5db;
+            }
+            .favorite-button.active {
+              color: #fff;
+              border-color: #111;
+              background: #111;
+            }
             .item-meta {
               color: #5f6368;
               font-size: 13px;
@@ -1030,13 +1344,35 @@ final class WebAdminServer {
             }
             .list-filter {
               display: grid;
-              grid-template-columns: minmax(180px, 260px) auto minmax(0, 1fr);
-              gap: 8px;
+              grid-template-columns: minmax(135px, 210px) minmax(135px, 210px) 118px 112px 58px 70px;
+              column-gap: 12px;
+              row-gap: 10px;
               align-items: end;
               margin: 16px 0 14px;
             }
+            .list-filter .keyword-filter {
+              grid-column: 1 / -1;
+              max-width: 520px;
+            }
             .list-filter label {
               gap: 6px;
+              min-width: 0;
+            }
+            .list-filter select,
+            .list-filter input {
+              width: 100%;
+              box-sizing: border-box;
+            }
+            .list-filter button,
+            .list-filter a.button {
+              width: 100%;
+              height: 36px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              white-space: nowrap;
+              padding: 0 8px;
+              box-sizing: border-box;
             }
             .empty {
               color: #5f6368;
@@ -1047,6 +1383,18 @@ final class WebAdminServer {
               flex-wrap: wrap;
               gap: 10px;
               margin-top: 18px;
+              align-items: center;
+            }
+            .item .actions {
+              flex-wrap: nowrap;
+            }
+            .item .actions .button {
+              height: 36px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              box-sizing: border-box;
+              white-space: nowrap;
             }
             button, a.button, span.button {
               appearance: none;
@@ -1112,6 +1460,23 @@ final class WebAdminServer {
             </nav>
             \(tabContent)
           </main>
+          <div id="attachmentPreviewModal" class="attachment-preview-modal" aria-hidden="true">
+            <div class="attachment-preview-panel" role="dialog" aria-modal="true" aria-labelledby="attachmentPreviewTitle">
+              <div class="attachment-preview-head">
+                <div>
+                  <h3 id="attachmentPreviewTitle">添付した画像</h3>
+                  <p id="attachmentPreviewFilename" class="attachment-preview-filename"></p>
+                </div>
+                <button id="attachmentPreviewTopClose" class="button" type="button">閉じる</button>
+              </div>
+              <div class="attachment-preview-body">
+                <img id="attachmentPreviewImage" alt="添付画像のプレビュー">
+              </div>
+              <div class="attachment-preview-actions">
+                <button id="attachmentPreviewClose" class="button primary attachment-preview-close" type="button">確認しました</button>
+              </div>
+            </div>
+          </div>
           <script>
             const imageFileInput = document.querySelector("#imageFileInput");
             const imageDataURLInput = document.querySelector("#imageDataURLInput");
@@ -1119,11 +1484,17 @@ final class WebAdminServer {
             const backImageFileInput = document.querySelector("#backImageFileInput");
             const backImageDataURLInput = document.querySelector("#backImageDataURLInput");
             const removeBackImageDataInput = document.querySelector("#removeBackImageDataInput");
+            const backImageAttachmentItem = document.querySelector("#backImageAttachmentItem");
+            const backImageStatus = document.querySelector("#backImageStatus");
+            const backImageCheckButton = document.querySelector("#backImageCheckButton");
             const explanationImageSlots = [1, 2, 3, 4].map((index) => ({
               index,
               fileInput: document.querySelector(`#explanationImageFileInput${index}`),
               dataInput: document.querySelector(`#explanationImageDataURLInput${index}`),
-              removeInput: document.querySelector(`#removeExplanationImageDataInput${index}`)
+              removeInput: document.querySelector(`#removeExplanationImageDataInput${index}`),
+              item: document.querySelector(`#explanationImageItem${index}`),
+              status: document.querySelector(`#explanationImageStatus${index}`),
+              checkButton: document.querySelector(`#explanationImageCheckButton${index}`)
             }));
             const previewBody = document.querySelector("#previewBody");
             const previewBalloon = document.querySelector("#previewBalloon");
@@ -1133,10 +1504,16 @@ final class WebAdminServer {
             const addGenreButton = document.querySelector("#addGenreButton");
             const smallCategorySelect = document.querySelector('select[name="selectedSmallCategoryName"]');
             const smallCategoryGenreSelect = document.querySelector('select[name="smallCategoryGenreName"]');
+            const manageGenreSelect = document.querySelector('select[name="manageGenreName"]');
             const manageSmallCategoryGenreSelect = document.querySelector('select[name="manageSmallCategoryGenreName"]');
             const manageSmallCategorySelect = document.querySelector('select[name="manageSmallCategoryName"]');
+            const listGenreFilterSelect = document.querySelector('select[name="listGenreFilter"]');
+            const listSmallCategoryFilterSelect = document.querySelector('select[name="listSmallCategoryFilter"]');
             const newSmallCategoryInput = document.querySelector('input[name="newSmallCategoryName"]');
             const addSmallCategoryButton = document.querySelector("#addSmallCategoryButton");
+            const editGenreButton = document.querySelector("#editGenreButton");
+            const editSmallCategoryButton = document.querySelector("#editSmallCategoryButton");
+            const categoryEditPanelMount = document.querySelector("#categoryEditPanelMount");
             const resetCreateFormButton = document.querySelector("#resetCreateFormButton");
             const previewTitleMeta = document.querySelector("#previewTitleMeta");
             const previewBackMeta = document.querySelector("#previewBackMeta");
@@ -1145,11 +1522,148 @@ final class WebAdminServer {
             const previewPositionMeta = document.querySelector("#previewPositionMeta");
             const previewSizeMeta = document.querySelector("#previewSizeMeta");
             const previewPauseMeta = document.querySelector("#previewPauseMeta");
+            const textInput = document.querySelector('[name="text"]');
+            const imageNameInput = document.querySelector('[name="imageName"]');
+            const textFontSizeInput = document.querySelector('input[name="textFontSize"]');
+            const imageCaptionFontSizeInput = document.querySelector('input[name="imageCaptionFontSize"]');
+            const attachmentPreviewModal = document.querySelector("#attachmentPreviewModal");
+            const attachmentPreviewTitle = document.querySelector("#attachmentPreviewTitle");
+            const attachmentPreviewFilename = document.querySelector("#attachmentPreviewFilename");
+            const attachmentPreviewImage = document.querySelector("#attachmentPreviewImage");
+            const attachmentPreviewClose = document.querySelector("#attachmentPreviewClose");
+            const attachmentPreviewTopClose = document.querySelector("#attachmentPreviewTopClose");
+
+            const restoreScrollY = new URLSearchParams(window.location.search).get("restoreScrollY");
+            if (restoreScrollY !== null) {
+              requestAnimationFrame(() => {
+                window.scrollTo(0, Number(restoreScrollY) || 0);
+              });
+            }
+
+            document.querySelectorAll("[data-edit-button]").forEach((button) => {
+              button.addEventListener("click", () => {
+                const returnTo = `${window.location.pathname}${window.location.search}`;
+                const separator = button.href.includes("?") ? "&" : "?";
+                button.href = `${button.href}${separator}returnTo=${encodeURIComponent(returnTo)}&returnScrollY=${encodeURIComponent(String(window.scrollY))}`;
+              });
+            });
+
+            function applyFavoriteButtonState(button, isFavorite) {
+              button.dataset.favorite = isFavorite ? "1" : "0";
+              button.classList.toggle("active", isFavorite);
+              button.textContent = isFavorite ? "⭐️" : "☆";
+              button.title = isFavorite ? "お気に入り解除" : "お気に入り";
+              const id = button.dataset.id;
+              if (id) {
+                button.href = `/toggle-favorite?id=${encodeURIComponent(id)}&favorite=${isFavorite ? "0" : "1"}`;
+              }
+            }
+
+            document.querySelectorAll("[data-favorite-button]").forEach((button) => {
+              button.addEventListener("click", async (event) => {
+                event.preventDefault();
+
+                const id = button.dataset.id;
+                if (!id || button.dataset.loading === "1") return;
+
+                const wasFavorite = button.dataset.favorite === "1";
+                const nextFavorite = !wasFavorite;
+                button.dataset.loading = "1";
+                applyFavoriteButtonState(button, nextFavorite);
+
+                try {
+                  const response = await fetch(`/toggle-favorite?id=${encodeURIComponent(id)}&favorite=${nextFavorite ? "1" : "0"}`, {
+                    method: "POST"
+                  });
+                  if (!response.ok) throw new Error("favorite update failed");
+                } catch {
+                  applyFavoriteButtonState(button, wasFavorite);
+                  window.alert("お気に入りの更新に失敗しました。もう一度お試しください。");
+                } finally {
+                  button.dataset.loading = "0";
+                }
+              });
+            });
+
+            document.querySelectorAll("[data-show-button]").forEach((button) => {
+              button.addEventListener("click", async (event) => {
+                event.preventDefault();
+
+                const id = button.dataset.id;
+                if (!id || button.dataset.loading === "1") return;
+
+                button.dataset.loading = "1";
+                try {
+                  const response = await fetch(`/show?id=${encodeURIComponent(id)}`, {
+                    method: "POST"
+                  });
+                  if (!response.ok) throw new Error("show update failed");
+                } catch {
+                  window.alert("表示に失敗しました。もう一度お試しください。");
+                } finally {
+                  button.dataset.loading = "0";
+                }
+              });
+            });
+
+            function currentScale() {
+              return previewBalloon?.classList.contains("large") ? 2 : 1;
+            }
+
+            function sizedFont(input, fallback) {
+              const value = Number(input?.value || 0);
+              return `${(value > 0 ? value : fallback) * currentScale()}px`;
+            }
+
+            function fontFallbackForName(name) {
+              return name === "imageCaptionFontSize" ? 12 : 26;
+            }
+
+            function updateFontSizeDisplays() {
+              document.querySelectorAll("[data-font-display]").forEach((display) => {
+                const name = display.dataset.fontDisplay;
+                const input = document.querySelector(`input[name="${name}"]`);
+                const value = Number(input?.value || 0);
+                display.textContent = value > 0 ? `${value}px` : "自動";
+              });
+            }
+
+            function applyPreviewFontSizes() {
+              if (!previewBody) return;
+              previewBody.style.fontSize = sizedFont(textFontSizeInput, 26);
+              previewBody.querySelectorAll(".preview-image-caption").forEach((caption) => {
+                caption.style.fontSize = sizedFont(imageCaptionFontSizeInput, 12);
+              });
+              updateFontSizeDisplays();
+            }
+
+            function adjustFontSize(targetName, delta) {
+              const input = document.querySelector(`input[name="${targetName}"]`);
+              if (!input) return;
+
+              const current = Number(input.value || 0);
+              const base = current > 0 ? current : fontFallbackForName(targetName);
+              input.value = String(Math.min(90, Math.max(8, base + delta)));
+              applyPreviewFontSizes();
+            }
+
+            function resetFontSize(targetName) {
+              const input = document.querySelector(`input[name="${targetName}"]`);
+              if (!input) return;
+              input.value = "0";
+              applyPreviewFontSizes();
+            }
+
+            function renderPreviewText() {
+              if (!previewBody || imageDataURLInput?.value) return;
+              previewBody.textContent = imageNameInput?.value || textInput?.value || "🎈";
+              applyPreviewFontSizes();
+            }
 
             function renderPreviewImage(dataURL) {
               if (!previewBody) return;
 
-              const captionText = document.querySelector('input[name="imageName"]')?.value.trim() || "";
+              const captionText = imageNameInput?.value.trim() || "";
               previewBody.innerHTML = "";
               const stack = document.createElement("span");
               stack.className = captionText ? "preview-image-stack has-caption" : "preview-image-stack";
@@ -1166,6 +1680,115 @@ final class WebAdminServer {
               image.alt = "";
               stack.append(image);
               previewBody.append(stack);
+              applyPreviewFontSizes();
+            }
+
+            function showAttachmentPreview(title, file, dataURL) {
+              if (!attachmentPreviewModal || !attachmentPreviewImage) return;
+              if (attachmentPreviewTitle) attachmentPreviewTitle.textContent = title;
+              if (attachmentPreviewFilename) {
+                const fileName = typeof file === "string" ? file : file?.name;
+                attachmentPreviewFilename.textContent = fileName ? `ファイル名: ${fileName}` : "";
+              }
+              attachmentPreviewImage.src = dataURL;
+              attachmentPreviewModal.classList.add("open");
+              attachmentPreviewModal.setAttribute("aria-hidden", "false");
+            }
+
+            function closeAttachmentPreview() {
+              if (!attachmentPreviewModal || !attachmentPreviewImage) return;
+              attachmentPreviewModal.classList.remove("open");
+              attachmentPreviewModal.setAttribute("aria-hidden", "true");
+              attachmentPreviewImage.removeAttribute("src");
+            }
+
+            function updateAttachmentState(item, status, checkButton, hasImage) {
+              item?.classList.toggle("attached", hasImage);
+              if (status) status.textContent = hasImage ? "添付済み" : "未添付";
+              if (checkButton) checkButton.disabled = !hasImage;
+            }
+
+            function postCategoryEdit(url, values) {
+              return fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+                body: new URLSearchParams(values)
+              });
+            }
+
+            function updateGenreOptions(oldName, newName) {
+              document.querySelectorAll("select option").forEach((option) => {
+                if (option.value === oldName && option.textContent === oldName) {
+                  option.value = newName;
+                  option.textContent = newName;
+                }
+                if (option.dataset.genre === oldName) {
+                  option.dataset.genre = newName;
+                }
+              });
+            }
+
+            function updateSmallCategoryOptionsAfterRename(genreName, oldName, newName) {
+              [smallCategorySelect, manageSmallCategorySelect, listSmallCategoryFilterSelect].forEach((select) => {
+                select?.querySelectorAll("option").forEach((option) => {
+                  if (option.value === oldName && (option.dataset.genre || genreName) === genreName) {
+                    option.value = newName;
+                    option.textContent = newName;
+                  }
+                });
+              });
+            }
+
+            function clearCategoryEditPanel() {
+              if (categoryEditPanelMount) categoryEditPanelMount.innerHTML = "";
+            }
+
+            function showCategoryEditPanel({ title, description, value, onSave }) {
+              if (!categoryEditPanelMount) return;
+
+              categoryEditPanelMount.innerHTML = "";
+              const panel = document.createElement("span");
+              panel.className = "category-edit-panel";
+
+              const heading = document.createElement("strong");
+              heading.textContent = title;
+              const descriptionNode = document.createElement("p");
+              descriptionNode.textContent = description;
+
+              const actions = document.createElement("span");
+              actions.className = "category-edit-actions";
+              const input = document.createElement("input");
+              input.value = value;
+              input.placeholder = title.includes("小カテゴリ") ? "修正後の小カテゴリ名" : "修正後の大カテゴリ名";
+              const saveButton = document.createElement("button");
+              saveButton.type = "button";
+              saveButton.textContent = "保存";
+              const cancelButton = document.createElement("button");
+              cancelButton.type = "button";
+              cancelButton.className = "button";
+              cancelButton.textContent = "キャンセル";
+
+              saveButton.addEventListener("click", async () => {
+                const nextValue = input.value.trim();
+                if (!nextValue) return;
+                saveButton.disabled = true;
+                try {
+                  await onSave(nextValue);
+                  clearCategoryEditPanel();
+                  updateSmallCategoryOptions();
+                  updateManageSmallCategoryOptions();
+                  updateListSmallCategoryFilterOptions();
+                } finally {
+                  saveButton.disabled = false;
+                }
+              });
+              cancelButton.addEventListener("click", clearCategoryEditPanel);
+
+              actions.append(input, saveButton, cancelButton);
+              panel.append(heading, descriptionNode, actions);
+              categoryEditPanelMount.append(panel);
+              input.focus();
+              input.select();
             }
 
             function fitImageToBalloon(file, maxSize = 1400, quality = 0.94) {
@@ -1204,6 +1827,7 @@ final class WebAdminServer {
                 imageDataURLInput.value = dataURL;
                 if (removeImageDataInput) removeImageDataInput.checked = false;
                 renderPreviewImage(dataURL);
+                showAttachmentPreview("表に添付した画像", file, dataURL);
               } catch {
                 window.alert("画像を読み込めませんでした。別の画像を選んでください。");
               }
@@ -1211,14 +1835,13 @@ final class WebAdminServer {
 
             removeImageDataInput?.addEventListener("change", () => {
               if (!removeImageDataInput.checked || !imageDataURLInput || !previewBody) return;
+              if (!window.confirm("表面の添付画像を削除してもよろしいですか？")) {
+                removeImageDataInput.checked = false;
+                return;
+              }
               imageDataURLInput.value = "";
               imageFileInput.value = "";
-              previewBody.textContent = document.querySelector('input[name="imageName"]')?.value || document.querySelector('input[name="text"]')?.value || "🎈";
-            });
-
-            document.querySelector('input[name="imageName"]')?.addEventListener("input", () => {
-              if (!imageDataURLInput?.value) return;
-              renderPreviewImage(imageDataURLInput.value);
+              renderPreviewText();
             });
 
             backImageFileInput?.addEventListener("change", async () => {
@@ -1229,6 +1852,8 @@ final class WebAdminServer {
                 const dataURL = await fitImageToBalloon(file);
                 backImageDataURLInput.value = dataURL;
                 if (removeBackImageDataInput) removeBackImageDataInput.checked = false;
+                updateAttachmentState(backImageAttachmentItem, backImageStatus, backImageCheckButton, true);
+                showAttachmentPreview("裏に添付した画像", file, dataURL);
               } catch {
                 window.alert("裏面画像を読み込めませんでした。別の画像を選んでください。");
               }
@@ -1236,18 +1861,32 @@ final class WebAdminServer {
 
             removeBackImageDataInput?.addEventListener("change", () => {
               if (!removeBackImageDataInput.checked || !backImageDataURLInput) return;
+              if (!window.confirm("裏面の添付画像を削除してもよろしいですか？")) {
+                removeBackImageDataInput.checked = false;
+                return;
+              }
               backImageDataURLInput.value = "";
               backImageFileInput.value = "";
+              updateAttachmentState(backImageAttachmentItem, backImageStatus, backImageCheckButton, false);
             });
 
-            explanationImageSlots.forEach(({ index, fileInput, dataInput, removeInput }) => {
+            backImageCheckButton?.addEventListener("click", (event) => {
+              event.preventDefault();
+              if (!backImageDataURLInput?.value) return;
+              showAttachmentPreview("裏に添付した画像", "保存済み画像", backImageDataURLInput.value);
+            });
+
+            explanationImageSlots.forEach(({ index, fileInput, dataInput, removeInput, item, status, checkButton }) => {
               fileInput?.addEventListener("change", async () => {
                 const file = fileInput.files?.[0];
                 if (!file || !dataInput) return;
 
                 try {
-                  dataInput.value = await fitImageToBalloon(file, 1000, 0.9);
+                  const dataURL = await fitImageToBalloon(file, 1000, 0.9);
+                  dataInput.value = dataURL;
                   if (removeInput) removeInput.checked = false;
+                  updateAttachmentState(item, status, checkButton, true);
+                  showAttachmentPreview(`解説に添付した画像${index}`, file, dataURL);
                 } catch {
                   window.alert(`解説画像${index}を読み込めませんでした。別の画像を選んでください。`);
                 }
@@ -1255,16 +1894,58 @@ final class WebAdminServer {
 
               removeInput?.addEventListener("change", () => {
                 if (!removeInput.checked || !dataInput) return;
+                if (!window.confirm(`解説画像${index}を削除してもよろしいですか？`)) {
+                  removeInput.checked = false;
+                  return;
+                }
                 dataInput.value = "";
                 if (fileInput) fileInput.value = "";
+                updateAttachmentState(item, status, checkButton, false);
               });
+
+              checkButton?.addEventListener("click", (event) => {
+                event.preventDefault();
+                if (!dataInput?.value) return;
+                showAttachmentPreview(`解説に添付した画像${index}`, "保存済み画像", dataInput.value);
+              });
+            });
+
+            attachmentPreviewClose?.addEventListener("click", closeAttachmentPreview);
+            attachmentPreviewTopClose?.addEventListener("click", closeAttachmentPreview);
+            attachmentPreviewModal?.addEventListener("click", (event) => {
+              if (event.target === attachmentPreviewModal) closeAttachmentPreview();
+            });
+            document.addEventListener("keydown", (event) => {
+              if (event.key === "Escape") closeAttachmentPreview();
             });
 
             sizeInputs.forEach((input) => {
               input.addEventListener("change", () => {
                 previewBalloon?.classList.toggle("large", input.value === "ラージ" && input.checked);
+                applyPreviewFontSizes();
               });
             });
+
+            textInput?.addEventListener("input", renderPreviewText);
+            imageNameInput?.addEventListener("input", () => {
+              if (imageDataURLInput?.value) {
+                renderPreviewImage(imageDataURLInput.value);
+              } else {
+                renderPreviewText();
+              }
+            });
+            document.querySelectorAll("[data-font-target]").forEach((button) => {
+              button.addEventListener("click", () => {
+                const target = button.dataset.fontTarget;
+                if (!target) return;
+                if (button.dataset.fontAuto === "true") {
+                  resetFontSize(target);
+                } else {
+                  adjustFontSize(target, Number(button.dataset.fontDelta || 0));
+                }
+              });
+            });
+            applyPreviewFontSizes();
 
             function selectedLargeCategory() {
               return newGenreInput?.value.trim() || genreSelect?.value || "未分類";
@@ -1316,6 +1997,27 @@ final class WebAdminServer {
               }
             }
 
+            function updateListSmallCategoryFilterOptions() {
+              if (!listSmallCategoryFilterSelect || !listGenreFilterSelect) return;
+              const largeCategory = listGenreFilterSelect.value || "";
+              let hasSelectedVisibleOption = false;
+
+              Array.from(listSmallCategoryFilterSelect.options).forEach((option) => {
+                const optionGenre = option.dataset.genre || "";
+                const isDefaultOption = option.value === "";
+                const isVisible = isDefaultOption || !largeCategory || optionGenre === largeCategory;
+                option.hidden = !isVisible;
+                option.disabled = !isVisible;
+                if (isVisible && option.selected) {
+                  hasSelectedVisibleOption = true;
+                }
+              });
+
+              if (!hasSelectedVisibleOption) {
+                listSmallCategoryFilterSelect.value = "";
+              }
+            }
+
             genreSelect?.addEventListener("change", () => {
               if (smallCategoryGenreSelect) {
                 smallCategoryGenreSelect.value = selectedLargeCategory();
@@ -1324,8 +2026,10 @@ final class WebAdminServer {
             });
             newGenreInput?.addEventListener("input", updateSmallCategoryOptions);
             manageSmallCategoryGenreSelect?.addEventListener("change", updateManageSmallCategoryOptions);
+            listGenreFilterSelect?.addEventListener("change", updateListSmallCategoryFilterOptions);
             updateSmallCategoryOptions();
             updateManageSmallCategoryOptions();
+            updateListSmallCategoryFilterOptions();
 
             addGenreButton?.addEventListener("click", () => {
               const genreName = newGenreInput?.value.trim();
@@ -1395,18 +2099,61 @@ final class WebAdminServer {
               updateManageSmallCategoryOptions();
             });
 
+            editGenreButton?.addEventListener("click", () => {
+              const genreName = manageGenreSelect?.value || "";
+              if (!genreName) return;
+
+              showCategoryEditPanel({
+                title: "大カテゴリ名を修正",
+                description: `選択中: ${genreName}`,
+                value: genreName,
+                onSave: async (newGenreName) => {
+                  await postCategoryEdit(`/rename-genre?targetGenreName=${encodeURIComponent(genreName)}`, {
+                    renamedGenreName: newGenreName
+                  });
+                  updateGenreOptions(genreName, newGenreName);
+                  if (genreSelect?.value === genreName) genreSelect.value = newGenreName;
+                  if (smallCategoryGenreSelect?.value === genreName) smallCategoryGenreSelect.value = newGenreName;
+                  if (manageGenreSelect) manageGenreSelect.value = newGenreName;
+                  if (manageSmallCategoryGenreSelect?.value === genreName) manageSmallCategoryGenreSelect.value = newGenreName;
+                }
+              });
+            });
+
+            editSmallCategoryButton?.addEventListener("click", () => {
+              const genreName = manageSmallCategoryGenreSelect?.value || "";
+              const smallCategoryName = manageSmallCategorySelect?.value || "";
+              if (!genreName || !smallCategoryName) return;
+
+              showCategoryEditPanel({
+                title: "小カテゴリ名を修正",
+                description: `大カテゴリ: ${genreName} / 小カテゴリ: ${smallCategoryName}`,
+                value: smallCategoryName,
+                onSave: async (newSmallCategoryName) => {
+                  await postCategoryEdit(`/rename-small-category?targetSmallCategoryGenreName=${encodeURIComponent(genreName)}&targetSmallCategoryName=${encodeURIComponent(smallCategoryName)}`, {
+                    renamedSmallCategoryName: newSmallCategoryName
+                  });
+                  updateSmallCategoryOptionsAfterRename(genreName, smallCategoryName, newSmallCategoryName);
+                  if (smallCategorySelect?.value === smallCategoryName) smallCategorySelect.value = newSmallCategoryName;
+                  if (manageSmallCategorySelect) manageSmallCategorySelect.value = newSmallCategoryName;
+                }
+              });
+            });
+
             resetCreateFormButton?.addEventListener("click", () => {
               const form = resetCreateFormButton.closest("form");
               if (!form) return;
 
               form.querySelector('input[name="title"]').value = "";
-              form.querySelector('input[name="text"]').value = "";
-              form.querySelector('input[name="backText"]').value = "";
+              form.querySelector('[name="text"]').value = "";
+              form.querySelector('[name="backText"]').value = "";
               form.querySelector('textarea[name="explanationText"]').value = "";
-              form.querySelector('input[name="imageName"]').value = "";
-              form.querySelector('input[name="backImageName"]').value = "";
+              form.querySelector('[name="imageName"]').value = "";
+              form.querySelector('[name="backImageName"]').value = "";
+              form.querySelector('input[name="textFontSize"]').value = "0";
+              form.querySelector('input[name="imageCaptionFontSize"]').value = "0";
               form.querySelector('input[name="intervalMinutes"]').value = "1.0";
-              form.querySelector('input[name="climbSpeed"]').value = "300";
+              form.querySelector('input[name="climbSpeed"]').value = "350";
               form.querySelector('input[name="randomIntervalMinSeconds"]').value = "5";
               form.querySelector('input[name="randomIntervalMaxSeconds"]').value = "600";
               form.querySelector('input[name="middlePauseDuration"]').value = "10";
@@ -1434,17 +2181,20 @@ final class WebAdminServer {
               if (backImageFileInput) backImageFileInput.value = "";
               if (backImageDataURLInput) backImageDataURLInput.value = "";
               if (removeBackImageDataInput) removeBackImageDataInput.checked = false;
-              explanationImageSlots.forEach(({ fileInput, dataInput, removeInput }) => {
+              updateAttachmentState(backImageAttachmentItem, backImageStatus, backImageCheckButton, false);
+              explanationImageSlots.forEach(({ fileInput, dataInput, removeInput, item, status, checkButton }) => {
                 if (fileInput) fileInput.value = "";
                 if (dataInput) dataInput.value = "";
                 if (removeInput) removeInput.checked = false;
+                updateAttachmentState(item, status, checkButton, false);
               });
               previewBalloon?.classList.add("large");
               if (previewBody) previewBody.textContent = "🎈";
+              applyPreviewFontSizes();
               if (previewTitleMeta) previewTitleMeta.textContent = "表面: ";
               if (previewBackMeta) previewBackMeta.textContent = "裏面: なし";
               if (previewGenreMeta) previewGenreMeta.textContent = "名前カテゴリ: 大カテゴリ 未分類";
-              if (previewSpeedMeta) previewSpeedMeta.textContent = "上昇スピード: 300 px/秒";
+              if (previewSpeedMeta) previewSpeedMeta.textContent = "上昇スピード: 350 px/秒";
               if (previewPositionMeta) previewPositionMeta.textContent = "上昇位置: 中央";
               if (previewSizeMeta) previewSizeMeta.textContent = "サイズ: ラージ";
               if (previewPauseMeta) previewPauseMeta.textContent = "中央停止: 10秒";
@@ -1473,18 +2223,27 @@ final class WebAdminServer {
         sizeOptions: String,
         editGenreName: String?,
         editSmallCategoryGenreName: String?,
-        editSmallCategoryName: String?
+        editSmallCategoryName: String?,
+        returnTo: String?,
+        returnScrollY: String?
     ) -> String {
         let hiddenIDInput = editingID.map { "<input type=\"hidden\" name=\"id\" value=\"\($0.uuidString)\">" } ?? ""
+        let returnToInput = editingID == nil ? "" : "<input type=\"hidden\" name=\"returnTo\" value=\"\((returnTo ?? "/?tab=list").htmlEscaped)\">"
+        let returnScrollYInput = editingID == nil ? "" : "<input type=\"hidden\" name=\"returnScrollY\" value=\"\((returnScrollY ?? "0").htmlEscaped)\">"
         let submitTitle = editingID == nil ? "保存" : "更新"
         let panelTitle = editingID == nil ? "風船作成" : "風船編集"
         let titleValue = editingID == nil ? "" : activeBalloon.title.htmlEscaped
         let textValue = editingID == nil ? "" : activeBalloon.text.htmlEscaped
+        let textFontSize = formatFontSize(activeBalloon.textFontSize)
+        let imageCaptionFontSize = formatFontSize(activeBalloon.imageCaptionFontSize)
         let resetLink = editingID == nil ? "" : "<a class=\"button\" href=\"/?tab=create\">新規作成に戻す</a>"
         let genreOptions = renderGenreOptions(selectedName: activeBalloon.genreName)
         let smallCategoryOptions = renderSmallCategoryOptions(selectedName: activeBalloon.smallCategoryName, selectedGenreName: activeBalloon.genreName)
         let explanationImageInputs = renderExplanationImageInputs(for: activeBalloon)
         let explanationImageControls = renderExplanationImageControls(for: activeBalloon)
+        let hasBackImage = backImageDataURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
+        let backImageAttachmentClass = hasBackImage ? " attached" : ""
+        let backImageStatus = hasBackImage ? "添付済み" : "未添付"
         let categoryEditPanel = renderCategoryEditPanel(
             editGenreName: editGenreName,
             editSmallCategoryGenreName: editSmallCategoryGenreName,
@@ -1495,6 +2254,8 @@ final class WebAdminServer {
         <section class="panel">
           <form action="/save" method="post">
             \(hiddenIDInput)
+            \(returnToInput)
+            \(returnScrollYInput)
             <input id="imageDataURLInput" type="hidden" name="imageDataURL" value="\(imageDataURL.htmlEscaped)">
             <input id="backImageDataURLInput" type="hidden" name="backImageDataURL" value="\(backImageDataURL.htmlEscaped)">
             \(explanationImageInputs)
@@ -1527,12 +2288,38 @@ final class WebAdminServer {
             <div class="grid">
               <label class="front-entry">
                 表に入れる文字
-                <input name="text" value="\(textValue)" placeholder="例: しばし待たれよ / 水を飲む / これいくらで売れた?">
+                <textarea class="compact" name="text" placeholder="例: しばし待たれよ / 水を飲む / これいくらで売れた?">\(textValue)</textarea>
               </label>
               <label class="front-entry">
                 表画像の上に出す文字
-                <input name="imageName" value="\(imageName.htmlEscaped)" placeholder="画像を入れた時に上に表示">
+                <textarea class="compact" name="imageName" placeholder="画像を入れた時に上に表示">\(imageName.htmlEscaped)</textarea>
               </label>
+              <div class="front-entry font-controls">
+                <div class="font-control">
+                  <input name="textFontSize" type="hidden" value="\(textFontSize)">
+                  <div class="font-control-head">
+                    <span>表文字サイズ</span>
+                    <span class="font-size-display" data-font-display="textFontSize"></span>
+                  </div>
+                  <div class="font-step-row">
+                    <button class="font-step" type="button" data-font-target="textFontSize" data-font-delta="-2" aria-label="表文字を小さく"><span>-</span></button>
+                    <button class="font-step" type="button" data-font-target="textFontSize" data-font-delta="2" aria-label="表文字を大きく"><span>+</span></button>
+                    <button class="font-auto" type="button" data-font-target="textFontSize" data-font-auto="true">自動</button>
+                  </div>
+                </div>
+                <div class="font-control">
+                  <input name="imageCaptionFontSize" type="hidden" value="\(imageCaptionFontSize)">
+                  <div class="font-control-head">
+                    <span>画像上文字サイズ</span>
+                    <span class="font-size-display" data-font-display="imageCaptionFontSize"></span>
+                  </div>
+                  <div class="font-step-row">
+                    <button class="font-step" type="button" data-font-target="imageCaptionFontSize" data-font-delta="-2" aria-label="画像上文字を小さく"><span>-</span></button>
+                    <button class="font-step" type="button" data-font-target="imageCaptionFontSize" data-font-delta="2" aria-label="画像上文字を大きく"><span>+</span></button>
+                    <button class="font-auto" type="button" data-font-target="imageCaptionFontSize" data-font-auto="true">自動</button>
+                  </div>
+                </div>
+              </div>
               <label class="file-row front-entry">
                 表に入れる画像ファイル
                 <span class="file-control-row">
@@ -1547,14 +2334,20 @@ final class WebAdminServer {
               <span class="grid-spacer"></span>
               <label class="back-entry">
                 裏に入れる文字
-                <input name="backText" value="\(activeBalloon.backText.htmlEscaped)" placeholder="例: 答え / 解説の要点 / 裏面メモ">
+                <textarea class="compact" name="backText" placeholder="例: 答え / 解説の要点 / 裏面メモ">\(activeBalloon.backText.htmlEscaped)</textarea>
               </label>
               <label class="back-entry">
                 裏画像の上に出す文字
-                <input name="backImageName" value="\(backImageName.htmlEscaped)" placeholder="画像を入れた時に上に表示">
+                <textarea class="compact" name="backImageName" placeholder="画像を入れた時に上に表示">\(backImageName.htmlEscaped)</textarea>
               </label>
-              <label class="file-row back-entry">
-                裏に入れる画像ファイル
+              <label id="backImageAttachmentItem" class="file-row back-entry attachment-image-item\(backImageAttachmentClass)">
+                <span class="attachment-image-title">
+                  裏に入れる画像ファイル
+                  <span class="attachment-image-title-actions">
+                    <button id="backImageCheckButton" class="button image-check-button" type="button" \(hasBackImage ? "" : "disabled")>画像確認</button>
+                    <small id="backImageStatus">\(backImageStatus)</small>
+                  </span>
+                </span>
                 <span class="file-control-row">
                   <input id="backImageFileInput" type="file" accept="image/*">
                   <span class="clearline">
@@ -1610,7 +2403,7 @@ final class WebAdminServer {
                     <select name="manageGenreName">
                       \(genreOptions)
                     </select>
-                    <button type="submit" formmethod="post" formaction="/edit-genre">修正</button>
+                    <button id="editGenreButton" type="button">修正</button>
                     <button type="submit" formmethod="post" formaction="/delete-genre" onclick="return confirm('本当に削除しますか？');">削除</button>
                   </span>
                 </span>
@@ -1633,11 +2426,11 @@ final class WebAdminServer {
                     <select name="manageSmallCategoryName">
                       \(smallCategoryOptions)
                     </select>
-                    <button type="submit" formmethod="post" formaction="/edit-small-category">修正</button>
+                    <button id="editSmallCategoryButton" type="button">修正</button>
                     <button type="submit" formmethod="post" formaction="/delete-small-category" onclick="return confirm('本当に削除しますか？');">削除</button>
                   </span>
                 </span>
-                \(categoryEditPanel)
+                <span id="categoryEditPanelMount">\(categoryEditPanel)</span>
               </label>
               <label class="full">
                 風船カラー
@@ -1697,9 +2490,16 @@ final class WebAdminServer {
         (1...4).map { index in
             let hasImage = balloon.explanationImageDataURLs[safe: index - 1]?.nilIfEmpty != nil
             let status = hasImage ? "添付済み" : "未添付"
+            let itemClass = hasImage ? "explanation-image-item attached" : "explanation-image-item"
             return """
-            <span class="explanation-image-item">
-              <span class="explanation-image-title">画像\(index) <small>\(status)</small></span>
+            <span class="\(itemClass)" id="explanationImageItem\(index)">
+              <span class="explanation-image-title">
+                画像\(index)
+                <span class="explanation-image-title-actions">
+                  <button id="explanationImageCheckButton\(index)" class="button image-check-button" type="button" \(hasImage ? "" : "disabled")>画像確認</button>
+                  <small id="explanationImageStatus\(index)">\(status)</small>
+                </span>
+              </span>
               <input id="explanationImageFileInput\(index)" type="file" accept="image/*">
               <span class="clearline">
                 <input id="removeExplanationImageDataInput\(index)" name="removeExplanationImageData\(index)" type="checkbox">
@@ -1710,10 +2510,27 @@ final class WebAdminServer {
         }.joined(separator: "\n")
     }
 
-    private func renderListPanel(itemNumberSearch: String?) -> String {
+    private func renderListPanel(
+        itemNumberSearch: String?,
+        listSort: String?,
+        genreFilter: String?,
+        smallCategoryFilter: String?,
+        favoriteFilter: String?
+    ) -> String {
         let operationStatus = settings.isPaused ? "停止中" : "稼働中"
         let enabledCount = settings.enabledBalloons.count
         let searchValue = itemNumberSearch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let selectedSort = normalizedListSort(listSort)
+        let selectedGenreFilter = normalizedListFilterValue(genreFilter)
+        let selectedSmallCategoryFilter = normalizedListFilterValue(smallCategoryFilter)
+        let selectedFavoriteFilter = normalizedFavoriteFilter(favoriteFilter)
+        let sortOptions = renderListSortOptions(selectedSort: selectedSort)
+        let favoriteOptions = renderFavoriteFilterOptions(selectedFavoriteFilter: selectedFavoriteFilter)
+        let genreFilterOptions = renderListGenreFilterOptions(selectedName: selectedGenreFilter)
+        let smallCategoryFilterOptions = renderListSmallCategoryFilterOptions(
+            selectedName: selectedSmallCategoryFilter,
+            selectedGenreName: selectedGenreFilter
+        )
         let startAllButton = settings.canRestoreAllStopState
             ? "<a class=\"button primary\" href=\"/toggle-all-balloons?enabled=1\">全商品停止を解除</a>"
             : "<span class=\"button disabled-control\">全商品停止を解除</span>"
@@ -1735,16 +2552,134 @@ final class WebAdminServer {
           </div>
           <form class="list-filter" action="/" method="get">
             <input type="hidden" name="tab" value="list">
+            <label class="keyword-filter">
+              タイトルキーワード入力欄
+              <input name="itemNumberSearch" value="\(searchValue.htmlEscaped)" placeholder="例: 12 / LESPORTSAC / 起きてない">
+            </label>
             <label>
-              品番で検索
-              <input name="itemNumberSearch" value="\(searchValue.htmlEscaped)" placeholder="例: 12">
+              大カテゴリ
+              <select name="listGenreFilter">
+                \(genreFilterOptions)
+              </select>
+            </label>
+            <label>
+              小カテゴリ
+              <select name="listSmallCategoryFilter">
+                \(smallCategoryFilterOptions)
+              </select>
+            </label>
+            <label>
+              並び順
+              <select name="listSort">
+                \(sortOptions)
+              </select>
+            </label>
+            <label>
+              お気に入り
+              <select name="listFavoriteFilter">
+                \(favoriteOptions)
+              </select>
             </label>
             <button type="submit">検索</button>
             <a class="button" href="/?tab=list">クリア</a>
           </form>
-          \(renderBalloonList(itemNumberSearch: searchValue))
+          \(renderBalloonList(
+            itemNumberSearch: searchValue,
+            listSort: selectedSort,
+            genreFilter: selectedGenreFilter,
+            smallCategoryFilter: selectedSmallCategoryFilter,
+            favoriteFilter: selectedFavoriteFilter
+          ))
         </section>
         """
+    }
+
+    private func normalizedListFilterValue(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private func normalizedFavoriteFilter(_ value: String?) -> String {
+        value == "favorite" ? "favorite" : ""
+    }
+
+    private func normalizedListSort(_ value: String?) -> String {
+        switch value ?? "category" {
+        case "itemAsc", "itemDesc":
+            return value ?? "category"
+        default:
+            return "category"
+        }
+    }
+
+    private func renderListSortOptions(selectedSort: String) -> String {
+        [
+            ("category", "カテゴリ別"),
+            ("itemAsc", "品番 昇順"),
+            ("itemDesc", "品番 降順")
+        ].map { value, label in
+            let selected = value == selectedSort ? " selected" : ""
+            return "<option value=\"\(value)\"\(selected)>\(label)</option>"
+        }.joined(separator: "\n")
+    }
+
+    private func renderFavoriteFilterOptions(selectedFavoriteFilter: String) -> String {
+        [
+            ("", "すべて"),
+            ("favorite", "お気に入りのみ")
+        ].map { value, label in
+            let selected = value == selectedFavoriteFilter ? " selected" : ""
+            return "<option value=\"\(value)\"\(selected)>\(label)</option>"
+        }.joined(separator: "\n")
+    }
+
+    private func renderListGenreFilterOptions(selectedName: String) -> String {
+        var genreNames = Set(settings.balloons.map {
+            $0.genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        })
+        genreNames.insert("未分類")
+
+        let options = genreNames.sorted { lhs, rhs in
+            if lhs == "未分類" { return true }
+            if rhs == "未分類" { return false }
+            return lhs.localizedStandardCompare(rhs) == .orderedAscending
+        }.map { genreName in
+            let selected = genreName == selectedName ? " selected" : ""
+            return "<option value=\"\(genreName.htmlEscaped)\"\(selected)>\(genreName.htmlEscaped)</option>"
+        }.joined(separator: "\n")
+
+        let allSelected = selectedName.isEmpty ? " selected" : ""
+        return "<option value=\"\"\(allSelected)>すべて</option>\n\(options)"
+    }
+
+    private func renderListSmallCategoryFilterOptions(selectedName: String, selectedGenreName: String) -> String {
+        var categoryPairs = Set(settings.balloons.map { balloon in
+            let genreName = balloon.genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let smallCategoryName = balloon.smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+            return SmallCategoryPair(genreName: genreName, smallCategoryName: smallCategoryName)
+        })
+        categoryPairs.insert(SmallCategoryPair(genreName: "未分類", smallCategoryName: "未指定"))
+
+        let options = categoryPairs.sorted { lhs, rhs in
+            if lhs.smallCategoryName == rhs.smallCategoryName {
+                if lhs.genreName == "未分類" { return true }
+                if rhs.genreName == "未分類" { return false }
+                return lhs.genreName.localizedStandardCompare(rhs.genreName) == .orderedAscending
+            }
+            if lhs.smallCategoryName == "未指定" { return true }
+            if rhs.smallCategoryName == "未指定" { return false }
+            return lhs.smallCategoryName.localizedStandardCompare(rhs.smallCategoryName) == .orderedAscending
+        }.map { smallCategoryName in
+            let isVisible = selectedGenreName.isEmpty || smallCategoryName.genreName == selectedGenreName
+            let selected = isVisible && smallCategoryName.smallCategoryName == selectedName ? " selected" : ""
+            let hidden = isVisible ? "" : " hidden disabled"
+            return "<option value=\"\(smallCategoryName.smallCategoryName.htmlEscaped)\" data-genre=\"\(smallCategoryName.genreName.htmlEscaped)\"\(selected)\(hidden)>\(smallCategoryName.smallCategoryName.htmlEscaped)</option>"
+        }.joined(separator: "\n")
+
+        let hasVisibleSelection = categoryPairs.contains { pair in
+            (selectedGenreName.isEmpty || pair.genreName == selectedGenreName) && pair.smallCategoryName == selectedName
+        }
+        let allSelected = selectedName.isEmpty || !hasVisibleSelection ? " selected" : ""
+        return "<option value=\"\"\(allSelected)>すべて</option>\n\(options)"
     }
 
     private func messageText(for message: String) -> String {
@@ -1907,6 +2842,24 @@ final class WebAdminServer {
         return (imageName.isEmpty ? text : imageName).htmlEscaped
     }
 
+    private func formatFontSize(_ value: Double) -> String {
+        value > 0 ? String(format: "%.0f", value) : "0"
+    }
+
+    private func previewTextFontSize(for balloon: BalloonProfile, large: Bool) -> String {
+        if balloon.textFontSize > 0 {
+            return String(format: "%.0f", balloon.textFontSize * (large ? 2.0 : 1.0))
+        }
+        return large ? "78" : "26"
+    }
+
+    private func previewImageCaptionFontSize(for balloon: BalloonProfile, large: Bool) -> String {
+        if balloon.imageCaptionFontSize > 0 {
+            return String(format: "%.0f", balloon.imageCaptionFontSize * (large ? 2.0 : 1.0))
+        }
+        return large ? "24" : "12"
+    }
+
     private func frontDisplayText(for balloon: BalloonProfile) -> String {
         balloon.text.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             ?? balloon.title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -1952,12 +2905,31 @@ final class WebAdminServer {
             || balloon.backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
     }
 
-    private func renderBalloonList(itemNumberSearch: String) -> String {
-        let balloons = filteredBalloons(itemNumberSearch: itemNumberSearch)
+    private func renderBalloonList(
+        itemNumberSearch: String,
+        listSort: String,
+        genreFilter: String,
+        smallCategoryFilter: String,
+        favoriteFilter: String
+    ) -> String {
+        let balloons = filteredBalloons(
+            itemNumberSearch: itemNumberSearch,
+            genreFilter: genreFilter,
+            smallCategoryFilter: smallCategoryFilter,
+            favoriteFilter: favoriteFilter
+        )
         guard !balloons.isEmpty else {
-            return itemNumberSearch.isEmpty
+            return itemNumberSearch.isEmpty && genreFilter.isEmpty && smallCategoryFilter.isEmpty && favoriteFilter.isEmpty
                 ? "<p class=\"empty\">まだ風船がありません。</p>"
-                : "<p class=\"empty\">該当する品番の風船がありません。</p>"
+                : "<p class=\"empty\">条件に一致する風船がありません。</p>"
+        }
+
+        if listSort == "itemAsc" || listSort == "itemDesc" {
+            return """
+            <div class="list">
+            \(renderBalloonItemNumberList(balloons: balloons, ascending: listSort == "itemAsc"))
+            </div>
+            """
         }
 
         return """
@@ -1967,13 +2939,40 @@ final class WebAdminServer {
         """
     }
 
-    private func filteredBalloons(itemNumberSearch: String) -> [BalloonProfile] {
+    private func filteredBalloons(
+        itemNumberSearch: String,
+        genreFilter: String,
+        smallCategoryFilter: String,
+        favoriteFilter: String
+    ) -> [BalloonProfile] {
         let query = itemNumberSearch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return settings.balloons }
+        let normalizedQuery = query.localizedLowercase
+        let normalizedGenreFilter = genreFilter.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSmallCategoryFilter = smallCategoryFilter.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return settings.balloons.filter { balloon in
-            "\(balloon.itemNumber)".contains(query)
+            let genreName = balloon.genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let smallCategoryName = balloon.smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+            let matchesKeyword = query.isEmpty
+                || "\(balloon.itemNumber)".contains(query)
+                || balloon.title.localizedLowercase.contains(normalizedQuery)
+            let matchesGenre = normalizedGenreFilter.isEmpty || genreName == normalizedGenreFilter
+            let matchesSmallCategory = normalizedSmallCategoryFilter.isEmpty || smallCategoryName == normalizedSmallCategoryFilter
+            let matchesFavorite = favoriteFilter != "favorite" || balloon.isFavorite
+
+            return matchesKeyword && matchesGenre && matchesSmallCategory && matchesFavorite
         }
+    }
+
+    private func renderBalloonItemNumberList(balloons sourceBalloons: [BalloonProfile], ascending: Bool) -> String {
+        let sortedBalloons = sourceBalloons.sorted { lhs, rhs in
+            if lhs.itemNumber == rhs.itemNumber {
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            }
+            return ascending ? lhs.itemNumber < rhs.itemNumber : lhs.itemNumber > rhs.itemNumber
+        }
+
+        return sortedBalloons.map(renderBalloonListItem).joined(separator: "\n")
     }
 
     private func renderBalloonGenreGroups(balloons sourceBalloons: [BalloonProfile]) -> String {
@@ -2000,17 +2999,63 @@ final class WebAdminServer {
             return """
             <section class="genre-group">
               <div class="genre-heading">
-                <h3>大カテゴリ: \(genreName.htmlEscaped)</h3>
+                <h3 class="genre-title-pill">大カテゴリ: \(genreName.htmlEscaped)</h3>
                 <div class="genre-actions">
                   <span class="genre-count">\(balloons.count)件 / 稼働中 \(enabledCount)件</span>
                   \(startGenreButton)
                   \(stopGenreButton)
                 </div>
               </div>
-              \(balloons.map(renderBalloonListItem).joined(separator: "\n"))
+              \(renderBalloonSmallCategoryGroups(balloons: balloons, genreName: genreName))
             </section>
             """
         }.joined(separator: "\n")
+    }
+
+    private func renderBalloonSmallCategoryGroups(balloons: [BalloonProfile], genreName: String) -> String {
+        let groupedBalloons = Dictionary(grouping: balloons) { balloon in
+            balloon.smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+        }
+        let smallCategoryNames = groupedBalloons.keys.sorted { lhs, rhs in
+            if lhs == "未指定" { return false }
+            if rhs == "未指定" { return true }
+            return lhs.localizedStandardCompare(rhs) == .orderedAscending
+        }
+
+        return smallCategoryNames.map { smallCategoryName in
+            let smallCategoryBalloons = groupedBalloons[smallCategoryName] ?? []
+            let enabledCount = smallCategoryBalloons.filter(\.isEnabled).count
+            let headingClass = smallCategoryHeadingClass(for: genreName, smallCategoryName: smallCategoryName)
+            return """
+            <section class="small-category-group">
+              <div class="\(headingClass)">
+                <h4>小カテゴリ: \(smallCategoryName.htmlEscaped)</h4>
+                <span class="small-category-count">\(smallCategoryBalloons.count)件 / 稼働中 \(enabledCount)件</span>
+              </div>
+              \(smallCategoryBalloons.map(renderBalloonListItem).joined(separator: "\n"))
+            </section>
+            """
+        }.joined(separator: "\n")
+    }
+
+    private func smallCategoryHeadingClass(for genreName: String, smallCategoryName: String) -> String {
+        let normalizedGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch normalizedGenreName {
+        case "せどり" where normalizedSmallCategoryName.contains("レディース"):
+            return "small-category-heading resale-ladies"
+        case "せどり" where normalizedSmallCategoryName.contains("メンズ"):
+            return "small-category-heading resale"
+        case "せどり":
+            return "small-category-heading resale-other"
+        case "マインド" where normalizedSmallCategoryName.contains("Dラボ"):
+            return "small-category-heading mind-dlab"
+        case "シンプルルール":
+            return "small-category-heading simple-rule"
+        default:
+            return "small-category-heading"
+        }
     }
 
     private func renderBalloonListItem(_ balloon: BalloonProfile) -> String {
@@ -2019,12 +3064,17 @@ final class WebAdminServer {
         let activeMark = settings.activeBalloonID == balloon.id ? " / 表示対象" : ""
         let enabledTitle = balloon.isEnabled ? "稼働OFF" : "稼働ON"
         let enabledValue = balloon.isEnabled ? "0" : "1"
+        let favoriteTitle = balloon.isFavorite ? "お気に入り解除" : "お気に入り"
+        let favoriteValue = balloon.isFavorite ? "0" : "1"
+        let favoriteClass = balloon.isFavorite ? "button favorite-button active" : "button favorite-button"
+        let favoriteSymbol = balloon.isFavorite ? "⭐️" : "☆"
+        let favoriteState = balloon.isFavorite ? "1" : "0"
         let itemClass = balloon.isEnabled ? "item enabled" : "item disabled"
         let statusClass = balloon.isEnabled ? "item-status" : "item-status off"
         let statusTitle = balloon.isEnabled ? "稼働中" : "停止中"
         let runningMark = balloon.isEnabled ? "<span class=\"running-mark\" title=\"稼働中\"></span>" : ""
         let showButton = balloon.isEnabled
-            ? "<a class=\"button primary\" href=\"/show?id=\(balloon.id.uuidString)\">表示</a>"
+            ? "<a class=\"button primary\" href=\"/show?id=\(balloon.id.uuidString)\" data-show-button=\"true\" data-id=\"\(balloon.id.uuidString)\">表示</a>"
             : "<span class=\"button disabled-control\">表示</span>"
         return """
         <div class="\(itemClass)">
@@ -2040,7 +3090,8 @@ final class WebAdminServer {
           <div class="actions">
             <a class="button" href="/toggle-balloon?id=\(balloon.id.uuidString)&enabled=\(enabledValue)">\(enabledTitle)</a>
             \(showButton)
-            <a class="button" href="/?tab=create&edit=\(balloon.id.uuidString)">編集</a>
+            <a class="button" href="/?tab=create&edit=\(balloon.id.uuidString)" data-edit-button="true">編集</a>
+            <a class="\(favoriteClass)" href="/toggle-favorite?id=\(balloon.id.uuidString)&favorite=\(favoriteValue)" title="\(favoriteTitle)" data-favorite-button="true" data-id="\(balloon.id.uuidString)" data-favorite="\(favoriteState)">\(favoriteSymbol)</a>
             <a class="button" href="/delete?id=\(balloon.id.uuidString)" onclick="return confirm('本当に削除しますか？');">削除</a>
           </div>
         </div>

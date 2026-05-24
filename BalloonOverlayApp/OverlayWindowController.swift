@@ -6,6 +6,25 @@ struct OverlayClick {
     let point: CGPoint
 }
 
+struct OverlayScroll {
+    let screenFrame: CGRect
+    let deltaX: CGFloat
+    let deltaY: CGFloat
+}
+
+enum OverlayDragPhase {
+    case began
+    case changed
+    case ended
+    case cancelled
+}
+
+struct OverlayDrag {
+    let screenFrame: CGRect
+    let point: CGPoint
+    let phase: OverlayDragPhase
+}
+
 struct OverlayInteractionFrames {
     var balloon: CGRect = .zero
     var image: CGRect = .zero
@@ -13,6 +32,7 @@ struct OverlayInteractionFrames {
     var triangle: CGRect = .zero
     var explanationButton: CGRect = .zero
     var explanationBubble: CGRect = .zero
+    var explanationScrollArea: CGRect = .zero
     var explanationCloseButton: CGRect = .zero
     var imagePreview: CGRect = .zero
     var isShowingExplanation = false
@@ -31,6 +51,37 @@ struct OverlayInteractionFrames {
             || backBadge.contains(point)
             || triangle.contains(point)
             || explanationButton.contains(point)
+    }
+
+    func shouldPassThroughToSubview(_ point: CGPoint) -> Bool {
+        if isShowingExplanation {
+            let scrollerHitFrame = CGRect(
+                x: explanationScrollArea.maxX - 22,
+                y: explanationScrollArea.minY,
+                width: 22,
+                height: explanationScrollArea.height
+            )
+            return scrollerHitFrame.contains(point)
+        }
+        return false
+    }
+
+    func shouldForwardScrollWheel(_ point: CGPoint) -> Bool {
+        if isShowingImagePreview {
+            return imagePreview.contains(point)
+        }
+        if isShowingExplanation {
+            return explanationScrollArea.contains(point)
+        }
+        return false
+    }
+
+    func shouldSendScrollToOverlay(_ point: CGPoint) -> Bool {
+        isShowingImagePreview && imagePreview.contains(point)
+    }
+
+    func shouldSendDragToOverlay(_ point: CGPoint) -> Bool {
+        isShowingImagePreview && imagePreview.contains(point)
     }
 }
 
@@ -52,6 +103,22 @@ final class OverlayInteractionRegistry {
         framesByScreen[key(for: screenFrame)]?.contains(point) ?? false
     }
 
+    func shouldPassThroughToSubview(screenFrame: CGRect, point: CGPoint) -> Bool {
+        framesByScreen[key(for: screenFrame)]?.shouldPassThroughToSubview(point) ?? false
+    }
+
+    func shouldForwardScrollWheel(screenFrame: CGRect, point: CGPoint) -> Bool {
+        framesByScreen[key(for: screenFrame)]?.shouldForwardScrollWheel(point) ?? false
+    }
+
+    func shouldSendScrollToOverlay(screenFrame: CGRect, point: CGPoint) -> Bool {
+        framesByScreen[key(for: screenFrame)]?.shouldSendScrollToOverlay(point) ?? false
+    }
+
+    func shouldSendDragToOverlay(screenFrame: CGRect, point: CGPoint) -> Bool {
+        framesByScreen[key(for: screenFrame)]?.shouldSendDragToOverlay(point) ?? false
+    }
+
     func sameScreen(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
         key(for: lhs) == key(for: rhs)
     }
@@ -63,6 +130,8 @@ final class OverlayInteractionRegistry {
 
 extension Notification.Name {
     static let overlayClick = Notification.Name("BalloonOverlayApp.overlayClick")
+    static let overlayScroll = Notification.Name("BalloonOverlayApp.overlayScroll")
+    static let overlayDrag = Notification.Name("BalloonOverlayApp.overlayDrag")
     static let overlayInteractionFramesChanged = Notification.Name("BalloonOverlayApp.overlayInteractionFramesChanged")
 }
 
@@ -84,19 +153,104 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        OverlayInteractionRegistry.shared.contains(screenFrame: screenFrame, point: point) ? self : nil
+        let overlayPoint = overlayCoordinatePoint(from: point)
+        guard OverlayInteractionRegistry.shared.contains(screenFrame: screenFrame, point: overlayPoint) else {
+            return nil
+        }
+
+        if OverlayInteractionRegistry.shared.shouldPassThroughToSubview(screenFrame: screenFrame, point: overlayPoint) {
+            return super.hitTest(point) ?? self
+        }
+
+        return self
     }
 
     override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
+        let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
         guard OverlayInteractionRegistry.shared.contains(screenFrame: screenFrame, point: point) else {
             return
+        }
+
+        if OverlayInteractionRegistry.shared.shouldSendDragToOverlay(screenFrame: screenFrame, point: point) {
+            NotificationCenter.default.post(
+                name: .overlayDrag,
+                object: OverlayDrag(screenFrame: screenFrame, point: point, phase: .began)
+            )
         }
 
         NotificationCenter.default.post(
             name: .overlayClick,
             object: OverlayClick(screenFrame: screenFrame, point: point)
         )
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
+        guard OverlayInteractionRegistry.shared.shouldSendDragToOverlay(screenFrame: screenFrame, point: point) else {
+            super.mouseDragged(with: event)
+            return
+        }
+
+        NotificationCenter.default.post(
+            name: .overlayDrag,
+            object: OverlayDrag(screenFrame: screenFrame, point: point, phase: .changed)
+        )
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
+        if OverlayInteractionRegistry.shared.shouldSendDragToOverlay(screenFrame: screenFrame, point: point) {
+            NotificationCenter.default.post(
+                name: .overlayDrag,
+                object: OverlayDrag(screenFrame: screenFrame, point: point, phase: .ended)
+            )
+        }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let rawPoint = convert(event.locationInWindow, from: nil)
+        let point = overlayCoordinatePoint(from: rawPoint)
+
+        if OverlayInteractionRegistry.shared.shouldSendScrollToOverlay(screenFrame: screenFrame, point: point) {
+            NotificationCenter.default.post(
+                name: .overlayScroll,
+                object: OverlayScroll(
+                    screenFrame: screenFrame,
+                    deltaX: event.scrollingDeltaX,
+                    deltaY: event.scrollingDeltaY
+                )
+            )
+            return
+        }
+
+        guard OverlayInteractionRegistry.shared.shouldForwardScrollWheel(screenFrame: screenFrame, point: point),
+              let scrollView = scrollView(at: rawPoint, in: self) else {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        scrollView.scrollWheel(with: event)
+    }
+
+    private func overlayCoordinatePoint(from point: NSPoint) -> CGPoint {
+        if isFlipped {
+            return CGPoint(x: point.x, y: point.y)
+        }
+        return CGPoint(x: point.x, y: bounds.height - point.y)
+    }
+
+    private func scrollView(at point: NSPoint, in view: NSView) -> NSScrollView? {
+        for subview in view.subviews.reversed() {
+            let pointInSubview = subview.convert(point, from: view)
+            guard subview.bounds.contains(pointInSubview) else { continue }
+            if let scrollView = subview as? NSScrollView {
+                return scrollView
+            }
+            if let scrollView = scrollView(at: pointInSubview, in: subview) {
+                return scrollView
+            }
+        }
+        return nil
     }
 }
 
@@ -107,6 +261,10 @@ final class OverlayWindowController {
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var framesObserver: NSObjectProtocol?
+
+    var isShowing: Bool {
+        !windows.isEmpty
+    }
 
     init(settings: OverlaySettings) {
         self.settings = settings

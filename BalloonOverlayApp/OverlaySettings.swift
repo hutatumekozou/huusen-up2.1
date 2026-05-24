@@ -12,6 +12,8 @@ struct BalloonProfile: Codable, Identifiable {
     var backText: String
     var backImageName: String?
     var backImageDataURL: String?
+    var textFontSize: Double
+    var imageCaptionFontSize: Double
     var genreName: String
     var smallCategoryName: String
     var colorName: String
@@ -22,6 +24,7 @@ struct BalloonProfile: Codable, Identifiable {
     var pausesAtMiddle: Bool
     var middlePauseDuration: Double
     var isEnabled: Bool
+    var isFavorite: Bool
     var correctCount: Int
     var incorrectCount: Int
     var lastReviewedAt: Date?
@@ -39,6 +42,8 @@ struct BalloonProfile: Codable, Identifiable {
         backText: String,
         backImageName: String?,
         backImageDataURL: String?,
+        textFontSize: Double,
+        imageCaptionFontSize: Double,
         genreName: String,
         smallCategoryName: String,
         colorName: String,
@@ -49,6 +54,7 @@ struct BalloonProfile: Codable, Identifiable {
         pausesAtMiddle: Bool,
         middlePauseDuration: Double,
         isEnabled: Bool,
+        isFavorite: Bool,
         correctCount: Int,
         incorrectCount: Int,
         lastReviewedAt: Date?,
@@ -65,6 +71,8 @@ struct BalloonProfile: Codable, Identifiable {
         self.backText = backText
         self.backImageName = backImageName
         self.backImageDataURL = backImageDataURL
+        self.textFontSize = textFontSize
+        self.imageCaptionFontSize = imageCaptionFontSize
         self.genreName = genreName
         self.smallCategoryName = smallCategoryName
         self.colorName = colorName
@@ -75,6 +83,7 @@ struct BalloonProfile: Codable, Identifiable {
         self.pausesAtMiddle = pausesAtMiddle
         self.middlePauseDuration = middlePauseDuration
         self.isEnabled = isEnabled
+        self.isFavorite = isFavorite
         self.correctCount = correctCount
         self.incorrectCount = incorrectCount
         self.lastReviewedAt = lastReviewedAt
@@ -94,6 +103,8 @@ struct BalloonProfile: Codable, Identifiable {
         backText = try container.decodeIfPresent(String.self, forKey: .backText) ?? ""
         backImageName = try container.decodeIfPresent(String.self, forKey: .backImageName)
         backImageDataURL = try container.decodeIfPresent(String.self, forKey: .backImageDataURL)
+        textFontSize = try container.decodeIfPresent(Double.self, forKey: .textFontSize) ?? 0
+        imageCaptionFontSize = try container.decodeIfPresent(Double.self, forKey: .imageCaptionFontSize) ?? 0
         genreName = try container.decodeIfPresent(String.self, forKey: .genreName) ?? "未分類"
         smallCategoryName = try container.decodeIfPresent(String.self, forKey: .smallCategoryName) ?? ""
         colorName = try container.decode(String.self, forKey: .colorName)
@@ -104,6 +115,7 @@ struct BalloonProfile: Codable, Identifiable {
         pausesAtMiddle = try container.decodeIfPresent(Bool.self, forKey: .pausesAtMiddle) ?? false
         middlePauseDuration = try container.decodeIfPresent(Double.self, forKey: .middlePauseDuration) ?? 1.0
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         correctCount = try container.decodeIfPresent(Int.self, forKey: .correctCount) ?? 0
         incorrectCount = try container.decodeIfPresent(Int.self, forKey: .incorrectCount) ?? 0
         lastReviewedAt = try container.decodeIfPresent(Date.self, forKey: .lastReviewedAt)
@@ -222,8 +234,8 @@ final class OverlaySettings {
         if randomIntervalMaxSeconds < randomIntervalMinSeconds {
             randomIntervalMaxSeconds = max(randomIntervalMinSeconds, 600)
         }
-        if climbSpeed <= 0 {
-            climbSpeed = 180
+        if defaults.object(forKey: Keys.climbSpeed) == nil || climbSpeed <= 0 || climbSpeed == 300 {
+            climbSpeed = 350
         }
         migrateLegacyBalloonIfNeeded()
         assignMissingItemNumbersIfNeeded()
@@ -273,6 +285,8 @@ final class OverlaySettings {
             backText: "",
             backImageName: nil,
             backImageDataURL: nil,
+            textFontSize: 0,
+            imageCaptionFontSize: 0,
             genreName: "Codex通知",
             smallCategoryName: "",
             colorName: color.name,
@@ -283,6 +297,7 @@ final class OverlaySettings {
             pausesAtMiddle: true,
             middlePauseDuration: 300,
             isEnabled: true,
+            isFavorite: false,
             correctCount: 0,
             incorrectCount: 0,
             lastReviewedAt: nil,
@@ -304,6 +319,8 @@ final class OverlaySettings {
         backText: String,
         backImageName: String?,
         backImageDataURL: String?,
+        textFontSize: Double,
+        imageCaptionFontSize: Double,
         genreName: String,
         smallCategoryName: String,
         colorName: String,
@@ -322,6 +339,8 @@ final class OverlaySettings {
         let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clampedTextFontSize = Self.clampedFontSize(textFontSize)
+        let clampedImageCaptionFontSize = Self.clampedFontSize(imageCaptionFontSize)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
 
         let balloon = BalloonProfile(
@@ -336,6 +355,8 @@ final class OverlaySettings {
             backText: trimmedBackText,
             backImageName: backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             backImageDataURL: backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            textFontSize: clampedTextFontSize,
+            imageCaptionFontSize: clampedImageCaptionFontSize,
             genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
             smallCategoryName: trimmedSmallCategoryName,
             colorName: color.name,
@@ -346,6 +367,7 @@ final class OverlaySettings {
             pausesAtMiddle: pausesAtMiddle,
             middlePauseDuration: clampedPauseDuration,
             isEnabled: true,
+            isFavorite: false,
             correctCount: 0,
             incorrectCount: 0,
             lastReviewedAt: nil,
@@ -368,6 +390,8 @@ final class OverlaySettings {
         backText: String,
         backImageName: String?,
         backImageDataURL: String?,
+        textFontSize: Double,
+        imageCaptionFontSize: Double,
         genreName: String,
         smallCategoryName: String,
         colorName: String,
@@ -388,9 +412,12 @@ final class OverlaySettings {
         let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clampedTextFontSize = Self.clampedFontSize(textFontSize)
+        let clampedImageCaptionFontSize = Self.clampedFontSize(imageCaptionFontSize)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
         let createdAt = balloons[index].createdAt
         let isEnabled = balloons[index].isEnabled
+        let isFavorite = balloons[index].isFavorite
         let correctCount = balloons[index].correctCount
         let incorrectCount = balloons[index].incorrectCount
         let itemNumber = balloons[index].itemNumber
@@ -408,6 +435,8 @@ final class OverlaySettings {
             backText: trimmedBackText,
             backImageName: backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             backImageDataURL: backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            textFontSize: clampedTextFontSize,
+            imageCaptionFontSize: clampedImageCaptionFontSize,
             genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
             smallCategoryName: trimmedSmallCategoryName,
             colorName: color.name,
@@ -418,6 +447,7 @@ final class OverlaySettings {
             pausesAtMiddle: pausesAtMiddle,
             middlePauseDuration: clampedPauseDuration,
             isEnabled: isEnabled,
+            isFavorite: isFavorite,
             correctCount: correctCount,
             incorrectCount: incorrectCount,
             lastReviewedAt: lastReviewedAt,
@@ -502,6 +532,12 @@ final class OverlaySettings {
             activeBalloonID = enabledBalloons.last?.id
         }
 
+        save()
+    }
+
+    func setBalloonFavorite(id: UUID, isFavorite: Bool) {
+        guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
+        balloons[index].isFavorite = isFavorite
         save()
     }
 
@@ -725,6 +761,8 @@ final class OverlaySettings {
             backText: "",
             backImageName: nil,
             backImageDataURL: nil,
+            textFontSize: 0,
+            imageCaptionFontSize: 0,
             genreName: "未分類",
             smallCategoryName: "",
             colorName: color.name,
@@ -735,6 +773,7 @@ final class OverlaySettings {
             pausesAtMiddle: false,
             middlePauseDuration: 1.0,
             isEnabled: true,
+            isFavorite: false,
             correctCount: 0,
             incorrectCount: 0,
             lastReviewedAt: nil,
@@ -759,6 +798,8 @@ final class OverlaySettings {
             backText: "",
             backImageName: nil,
             backImageDataURL: nil,
+            textFontSize: 0,
+            imageCaptionFontSize: 0,
             genreName: "未分類",
             smallCategoryName: "",
             colorName: color.name,
@@ -769,11 +810,17 @@ final class OverlaySettings {
             pausesAtMiddle: false,
             middlePauseDuration: 1.0,
             isEnabled: true,
+            isFavorite: false,
             correctCount: 0,
             incorrectCount: 0,
             lastReviewedAt: nil,
             createdAt: Date()
         )
+    }
+
+    private static func clampedFontSize(_ value: Double) -> Double {
+        guard value.isFinite, value > 0 else { return 0 }
+        return min(max(value, 8), 90)
     }
 }
 
