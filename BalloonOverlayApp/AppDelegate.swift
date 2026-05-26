@@ -52,15 +52,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseMenuItem = pauseItem
     }
 
-    private func startTimer() {
+    private func startTimer(after interval: TimeInterval? = nil) {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: settings.nextDisplayInterval(), repeats: false) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: interval ?? settings.nextDisplayInterval(), repeats: false) { [weak self] _ in
             guard let self else { return }
-            defer { self.startTimer() }
             guard !self.settings.isPaused, self.settings.hasEnabledBalloons else { return }
-            guard !self.overlayController.isShowing else { return }
+            guard !self.overlayController.isShowing else {
+                self.startTimer(after: 1)
+                return
+            }
             self.settings.activateNextEnabledBalloon()
             self.overlayController.show()
+            self.startTimer()
         }
     }
 
@@ -74,6 +77,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pauseChanged() {
         pauseMenuItem?.title = pauseTitle
+        if settings.isPaused {
+            timer?.invalidate()
+            timer = nil
+        } else {
+            startTimer(after: 1)
+        }
     }
 
     @objc private func showNow() {

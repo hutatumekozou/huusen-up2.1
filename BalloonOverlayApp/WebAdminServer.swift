@@ -227,13 +227,29 @@ final class WebAdminServer {
             let isEnabled = path.query["enabled"] == "1"
             DispatchQueue.main.async {
                 if isEnabled {
-                    self.settings.restoreAllStopState()
+                    if self.settings.canRestoreAllStopState {
+                        self.settings.restoreAllStopState()
+                    } else {
+                        self.settings.setAllBalloonsEnabled(true)
+                    }
                 } else {
                     self.settings.setAllBalloonsEnabled(false)
                 }
                 self.settingsChanged()
             }
             return redirect(to: "/?tab=list&message=\(isEnabled ? "allRestored" : "allStopped")")
+        case "/resume-all-balloons":
+            DispatchQueue.main.async {
+                let wasPaused = self.settings.isPaused
+                self.settings.setAllBalloonsEnabled(true)
+                self.settings.setPaused(false)
+                if wasPaused {
+                    self.pauseChanged()
+                } else {
+                    self.settingsChanged()
+                }
+            }
+            return redirect(to: "/?tab=list&message=allResumed")
         case "/toggle-genre-balloons":
             if let genreName = path.query["genre"] {
                 let isEnabled = path.query["enabled"] == "1"
@@ -242,6 +258,21 @@ final class WebAdminServer {
                     self.settingsChanged()
                 }
                 return redirect(to: "/?tab=list&message=\(isEnabled ? "genreRestored" : "genreStopped")")
+            }
+            return redirect(to: "/?tab=list&message=updated")
+        case "/resume-genre-balloons":
+            if let genreName = path.query["genre"] {
+                DispatchQueue.main.async {
+                    let wasPaused = self.settings.isPaused
+                    self.settings.setBalloonsEnabled(inGenre: genreName, isEnabled: true)
+                    self.settings.setPaused(false)
+                    if wasPaused {
+                        self.pauseChanged()
+                    } else {
+                        self.settingsChanged()
+                    }
+                }
+                return redirect(to: "/?tab=list&message=genreResumed")
             }
             return redirect(to: "/?tab=list&message=updated")
         case "/edit-genre":
@@ -333,10 +364,10 @@ final class WebAdminServer {
                         genreName: genreName,
                         smallCategoryName: smallCategoryName,
                         colorName: query["colorName"] ?? OverlaySettings.colorOptions[0].name,
-                        positionName: query["positionName"] ?? "中央",
+                        positionName: query["positionName"] ?? "ランダム",
                         sizeName: query["sizeName"] ?? "標準",
                         pausesAtMiddle: query["pausesAtMiddle"] == "on",
-                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: 1.0)
+                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: 15.0)
                     )
                 } else {
                     self.settings.addBalloon(
@@ -354,10 +385,10 @@ final class WebAdminServer {
                         genreName: genreName,
                         smallCategoryName: smallCategoryName,
                         colorName: query["colorName"] ?? OverlaySettings.colorOptions[0].name,
-                        positionName: query["positionName"] ?? "中央",
+                        positionName: query["positionName"] ?? "ランダム",
                         sizeName: query["sizeName"] ?? "標準",
                         pausesAtMiddle: query["pausesAtMiddle"] == "on",
-                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: 1.0)
+                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: 15.0)
                     )
                 }
                 self.settingsChanged()
@@ -501,7 +532,7 @@ final class WebAdminServer {
         let imageDataURL = formBalloon.imageDataURL ?? ""
         let backImageName = formBalloon.backImageName ?? ""
         let backImageDataURL = formBalloon.backImageDataURL ?? ""
-        let previewSizeClass = formBalloon.sizeName == "ラージ" ? " large" : ""
+        let previewSizeClass = previewSizeClass(for: formBalloon.sizeName)
         let previewContent = renderPreviewContent(imageDataURL: imageDataURL, imageName: imageName, text: frontDisplayText(for: formBalloon))
         let selectedTab = editingBalloon != nil ? "create" : (tab == "list" ? "list" : "create")
         let status = settings.isPaused ? "一時停止中" : "稼働中"
@@ -637,12 +668,18 @@ final class WebAdminServer {
             .full {
               grid-column: 1 / -1;
             }
+            .triple-row {
+              grid-column: 1 / -1;
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              gap: 16px;
+            }
             .top-field {
               margin-bottom: 18px;
             }
             .preview {
               display: grid;
-              grid-template-columns: 210px minmax(0, 1fr);
+              grid-template-columns: 320px minmax(0, 1fr);
               gap: 18px;
               align-items: center;
               margin-bottom: 22px;
@@ -655,6 +692,10 @@ final class WebAdminServer {
             .preview-balloon.large {
               width: 192px;
               height: 240px;
+            }
+            .preview-balloon.extra-large {
+              width: 288px;
+              height: 360px;
             }
             .preview-body {
               width: 96px;
@@ -676,7 +717,12 @@ final class WebAdminServer {
             .preview-balloon.large .preview-body {
               width: 192px;
               height: 192px;
-              font-size: \(previewTextFontSize(for: formBalloon, large: true))px;
+              font-size: \(previewTextFontSize(for: formBalloon))px;
+            }
+            .preview-balloon.extra-large .preview-body {
+              width: 288px;
+              height: 288px;
+              font-size: \(previewTextFontSize(for: formBalloon))px;
             }
             .preview-image-stack {
               display: grid;
@@ -697,7 +743,10 @@ final class WebAdminServer {
               text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
             }
             .preview-balloon.large .preview-image-caption {
-              font-size: \(previewImageCaptionFontSize(for: formBalloon, large: true))px;
+              font-size: \(previewImageCaptionFontSize(for: formBalloon))px;
+            }
+            .preview-balloon.extra-large .preview-image-caption {
+              font-size: \(previewImageCaptionFontSize(for: formBalloon))px;
             }
             .preview-body img {
               display: block;
@@ -709,11 +758,18 @@ final class WebAdminServer {
               max-width: 156px;
               max-height: 156px;
             }
+            .preview-balloon.extra-large .preview-body img {
+              max-width: 234px;
+              max-height: 234px;
+            }
             .preview-image-stack.has-caption img {
               max-height: 52px;
             }
             .preview-balloon.large .preview-image-stack.has-caption img {
               max-height: 112px;
+            }
+            .preview-balloon.extra-large .preview-image-stack.has-caption img {
+              max-height: 168px;
             }
             .file-row {
               display: grid;
@@ -909,6 +965,21 @@ final class WebAdminServer {
               font-weight: 700;
               margin: 0 0 8px;
             }
+            .preview-side-toggle {
+              display: inline-flex;
+              gap: 8px;
+              margin: 0 0 10px;
+            }
+            .preview-side-button {
+              min-height: 34px;
+              padding: 0 16px;
+              border-radius: 999px;
+            }
+            .preview-side-button.active {
+              background: #111;
+              border-color: #111;
+              color: #fff;
+            }
             .preview-meta {
               color: #5f6368;
               margin: 0;
@@ -957,6 +1028,9 @@ final class WebAdminServer {
               display: grid;
               grid-template-columns: repeat(2, minmax(0, 1fr));
               gap: 10px;
+            }
+            .font-controls.single {
+              grid-template-columns: minmax(0, 1fr);
             }
             .font-control {
               display: grid;
@@ -1132,6 +1206,9 @@ final class WebAdminServer {
             }
             .segmented.two {
               grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .segmented.three {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
             }
             .segment input {
               position: absolute;
@@ -1498,7 +1575,9 @@ final class WebAdminServer {
             }));
             const previewBody = document.querySelector("#previewBody");
             const previewBalloon = document.querySelector("#previewBalloon");
+            const previewSideButtons = document.querySelectorAll("[data-preview-side]");
             const sizeInputs = document.querySelectorAll('input[name="sizeName"]');
+            const colorInputs = document.querySelectorAll('input[name="colorName"]');
             const genreSelect = document.querySelector('select[name="selectedGenreName"]');
             const newGenreInput = document.querySelector('input[name="newGenreName"]');
             const addGenreButton = document.querySelector("#addGenreButton");
@@ -1524,6 +1603,8 @@ final class WebAdminServer {
             const previewPauseMeta = document.querySelector("#previewPauseMeta");
             const textInput = document.querySelector('[name="text"]');
             const imageNameInput = document.querySelector('[name="imageName"]');
+            const backTextInput = document.querySelector('[name="backText"]');
+            const backImageNameInput = document.querySelector('[name="backImageName"]');
             const textFontSizeInput = document.querySelector('input[name="textFontSize"]');
             const imageCaptionFontSizeInput = document.querySelector('input[name="imageCaptionFontSize"]');
             const attachmentPreviewModal = document.querySelector("#attachmentPreviewModal");
@@ -1607,12 +1688,15 @@ final class WebAdminServer {
             });
 
             function currentScale() {
+              if (previewBalloon?.classList.contains("extra-large")) return 3;
               return previewBalloon?.classList.contains("large") ? 2 : 1;
             }
 
             function sizedFont(input, fallback) {
               const value = Number(input?.value || 0);
-              return `${(value > 0 ? value : fallback) * currentScale()}px`;
+              const scale = currentScale();
+              const fallbackSize = input?.name === "textFontSize" && scale > 1 ? 39 : fallback;
+              return `${(value > 0 ? value : fallbackSize) * scale}px`;
             }
 
             function fontFallbackForName(name) {
@@ -1637,6 +1721,16 @@ final class WebAdminServer {
               updateFontSizeDisplays();
             }
 
+            function applyPreviewColor(input) {
+              if (!previewBody || !input) return;
+              const start = input.dataset.startHex;
+              const end = input.dataset.endHex;
+              if (!start || !end) return;
+              previewBody.style.background = `linear-gradient(135deg, ${start}, ${end})`;
+              const knot = previewBalloon?.querySelector(".preview-knot");
+              if (knot) knot.style.borderTopColor = end;
+            }
+
             function adjustFontSize(targetName, delta) {
               const input = document.querySelector(`input[name="${targetName}"]`);
               if (!input) return;
@@ -1654,16 +1748,28 @@ final class WebAdminServer {
               applyPreviewFontSizes();
             }
 
-            function renderPreviewText() {
-              if (!previewBody || imageDataURLInput?.value) return;
-              previewBody.textContent = imageNameInput?.value || textInput?.value || "🎈";
+            function activePreviewSide() {
+              return document.querySelector("[data-preview-side].active")?.dataset.previewSide || "front";
+            }
+
+            function setPreviewSide(side) {
+              previewSideButtons.forEach((button) => {
+                const isActive = button.dataset.previewSide === side;
+                button.classList.toggle("active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
+              });
+              renderPreviewSide();
+            }
+
+            function renderPreviewText(text) {
+              if (!previewBody) return;
+              previewBody.textContent = text || "🎈";
               applyPreviewFontSizes();
             }
 
-            function renderPreviewImage(dataURL) {
+            function renderPreviewImage(dataURL, captionText) {
               if (!previewBody) return;
 
-              const captionText = imageNameInput?.value.trim() || "";
               previewBody.innerHTML = "";
               const stack = document.createElement("span");
               stack.className = captionText ? "preview-image-stack has-caption" : "preview-image-stack";
@@ -1681,6 +1787,24 @@ final class WebAdminServer {
               stack.append(image);
               previewBody.append(stack);
               applyPreviewFontSizes();
+            }
+
+            function renderPreviewSide() {
+              const side = activePreviewSide();
+              if (side === "back") {
+                if (backImageDataURLInput?.value) {
+                  renderPreviewImage(backImageDataURLInput.value, backImageNameInput?.value.trim() || "");
+                } else {
+                  renderPreviewText(backTextInput?.value || "裏面");
+                }
+                return;
+              }
+
+              if (imageDataURLInput?.value) {
+                renderPreviewImage(imageDataURLInput.value, imageNameInput?.value.trim() || "");
+              } else {
+                renderPreviewText(imageNameInput?.value || textInput?.value || "🎈");
+              }
             }
 
             function showAttachmentPreview(title, file, dataURL) {
@@ -1826,7 +1950,7 @@ final class WebAdminServer {
                 const dataURL = await fitImageToBalloon(file);
                 imageDataURLInput.value = dataURL;
                 if (removeImageDataInput) removeImageDataInput.checked = false;
-                renderPreviewImage(dataURL);
+                setPreviewSide("front");
                 showAttachmentPreview("表に添付した画像", file, dataURL);
               } catch {
                 window.alert("画像を読み込めませんでした。別の画像を選んでください。");
@@ -1841,7 +1965,7 @@ final class WebAdminServer {
               }
               imageDataURLInput.value = "";
               imageFileInput.value = "";
-              renderPreviewText();
+              renderPreviewSide();
             });
 
             backImageFileInput?.addEventListener("change", async () => {
@@ -1853,6 +1977,7 @@ final class WebAdminServer {
                 backImageDataURLInput.value = dataURL;
                 if (removeBackImageDataInput) removeBackImageDataInput.checked = false;
                 updateAttachmentState(backImageAttachmentItem, backImageStatus, backImageCheckButton, true);
+                setPreviewSide("back");
                 showAttachmentPreview("裏に添付した画像", file, dataURL);
               } catch {
                 window.alert("裏面画像を読み込めませんでした。別の画像を選んでください。");
@@ -1868,6 +1993,7 @@ final class WebAdminServer {
               backImageDataURLInput.value = "";
               backImageFileInput.value = "";
               updateAttachmentState(backImageAttachmentItem, backImageStatus, backImageCheckButton, false);
+              renderPreviewSide();
             });
 
             backImageCheckButton?.addEventListener("click", (event) => {
@@ -1921,19 +2047,27 @@ final class WebAdminServer {
 
             sizeInputs.forEach((input) => {
               input.addEventListener("change", () => {
-                previewBalloon?.classList.toggle("large", input.value === "ラージ" && input.checked);
+                if (!input.checked) return;
+                previewBalloon?.classList.toggle("large", input.value === "ラージ");
+                previewBalloon?.classList.toggle("extra-large", input.value === "特大");
+                if (previewSizeMeta) previewSizeMeta.textContent = `サイズ: ${input.value}`;
                 applyPreviewFontSizes();
               });
             });
 
-            textInput?.addEventListener("input", renderPreviewText);
-            imageNameInput?.addEventListener("input", () => {
-              if (imageDataURLInput?.value) {
-                renderPreviewImage(imageDataURLInput.value);
-              } else {
-                renderPreviewText();
-              }
+            colorInputs.forEach((input) => {
+              input.addEventListener("change", () => {
+                if (input.checked) applyPreviewColor(input);
+              });
             });
+
+            previewSideButtons.forEach((button) => {
+              button.addEventListener("click", () => setPreviewSide(button.dataset.previewSide || "front"));
+            });
+            textInput?.addEventListener("input", renderPreviewSide);
+            imageNameInput?.addEventListener("input", renderPreviewSide);
+            backTextInput?.addEventListener("input", renderPreviewSide);
+            backImageNameInput?.addEventListener("input", renderPreviewSide);
             document.querySelectorAll("[data-font-target]").forEach((button) => {
               button.addEventListener("click", () => {
                 const target = button.dataset.fontTarget;
@@ -1945,7 +2079,7 @@ final class WebAdminServer {
                 }
               });
             });
-            applyPreviewFontSizes();
+            renderPreviewSide();
 
             function selectedLargeCategory() {
               return newGenreInput?.value.trim() || genreSelect?.value || "未分類";
@@ -2153,15 +2287,16 @@ final class WebAdminServer {
               form.querySelector('input[name="textFontSize"]').value = "0";
               form.querySelector('input[name="imageCaptionFontSize"]').value = "0";
               form.querySelector('input[name="intervalMinutes"]').value = "1.0";
-              form.querySelector('input[name="climbSpeed"]').value = "350";
+              form.querySelector('input[name="climbSpeed"]').value = "400";
               form.querySelector('input[name="randomIntervalMinSeconds"]').value = "5";
               form.querySelector('input[name="randomIntervalMaxSeconds"]').value = "600";
-              form.querySelector('input[name="middlePauseDuration"]').value = "10";
+              form.querySelector('input[name="middlePauseDuration"]').value = "15";
               form.querySelector('input[name="pausesAtMiddle"]').checked = true;
 
               const defaultColor = form.querySelector('input[name="colorName"][value="レッド"]') || form.querySelector('input[name="colorName"]');
               if (defaultColor) defaultColor.checked = true;
-              const defaultPosition = form.querySelector('input[name="positionName"][value="中央"]') || form.querySelector('input[name="positionName"]');
+              applyPreviewColor(defaultColor);
+              const defaultPosition = form.querySelector('input[name="positionName"][value="ランダム"]') || form.querySelector('input[name="positionName"]');
               if (defaultPosition) defaultPosition.checked = true;
               const defaultSize = form.querySelector('input[name="sizeName"][value="ラージ"]') || form.querySelector('input[name="sizeName"]');
               if (defaultSize) defaultSize.checked = true;
@@ -2189,15 +2324,15 @@ final class WebAdminServer {
                 updateAttachmentState(item, status, checkButton, false);
               });
               previewBalloon?.classList.add("large");
-              if (previewBody) previewBody.textContent = "🎈";
-              applyPreviewFontSizes();
+              previewBalloon?.classList.remove("extra-large");
+              setPreviewSide("front");
               if (previewTitleMeta) previewTitleMeta.textContent = "表面: ";
               if (previewBackMeta) previewBackMeta.textContent = "裏面: なし";
               if (previewGenreMeta) previewGenreMeta.textContent = "名前カテゴリ: 大カテゴリ 未分類";
-              if (previewSpeedMeta) previewSpeedMeta.textContent = "上昇スピード: 350 px/秒";
-              if (previewPositionMeta) previewPositionMeta.textContent = "上昇位置: 中央";
+              if (previewSpeedMeta) previewSpeedMeta.textContent = "上昇スピード: 400 px/秒";
+              if (previewPositionMeta) previewPositionMeta.textContent = "上昇位置: ランダム";
               if (previewSizeMeta) previewSizeMeta.textContent = "サイズ: ラージ";
-              if (previewPauseMeta) previewPauseMeta.textContent = "中央停止: 10秒";
+              if (previewPauseMeta) previewPauseMeta.textContent = "中央停止: 15秒";
             });
           </script>
         </body>
@@ -2258,6 +2393,7 @@ final class WebAdminServer {
             \(returnScrollYInput)
             <input id="imageDataURLInput" type="hidden" name="imageDataURL" value="\(imageDataURL.htmlEscaped)">
             <input id="backImageDataURLInput" type="hidden" name="backImageDataURL" value="\(backImageDataURL.htmlEscaped)">
+            <input type="hidden" name="intervalMinutes" value="\(intervalMinutes)">
             \(explanationImageInputs)
             <div class="panel-heading">
               <h2>\(panelTitle)</h2>
@@ -2276,6 +2412,10 @@ final class WebAdminServer {
               </div>
               <div>
                 <p class="preview-title">登録中の風船</p>
+                <div class="preview-side-toggle" aria-label="プレビュー面の切り替え">
+                  <button class="button preview-side-button active" type="button" data-preview-side="front">表</button>
+                  <button class="button preview-side-button" type="button" data-preview-side="back">裏</button>
+                </div>
                 <p class="preview-meta" id="previewTitleMeta">表面: \(frontDisplayText(for: activeBalloon).htmlEscaped)</p>
                 <p class="preview-meta" id="previewBackMeta">裏面: \(backSideSummary(for: activeBalloon).htmlEscaped)</p>
                 <p class="preview-meta" id="previewGenreMeta">名前カテゴリ: \(categorySummary(for: activeBalloon).htmlEscaped)</p>
@@ -2286,6 +2426,12 @@ final class WebAdminServer {
               </div>
             </div>
             <div class="grid">
+              <label class="full">
+                風船カラー
+                <div class="swatches">
+                  \(colorOptions)
+                </div>
+              </label>
               <label class="front-entry">
                 表に入れる文字
                 <textarea class="compact" name="text" placeholder="例: しばし待たれよ / 水を飲む / これいくらで売れた?">\(textValue)</textarea>
@@ -2331,7 +2477,6 @@ final class WebAdminServer {
                 </span>
                 <p class="file-hint">表面に出す画像です。選んだ画像は自動で縮小して保存します。</p>
               </label>
-              <span class="grid-spacer"></span>
               <label class="back-entry">
                 裏に入れる文字
                 <textarea class="compact" name="backText" placeholder="例: 答え / 解説の要点 / 裏面メモ">\(activeBalloon.backText.htmlEscaped)</textarea>
@@ -2340,6 +2485,30 @@ final class WebAdminServer {
                 裏画像の上に出す文字
                 <textarea class="compact" name="backImageName" placeholder="画像を入れた時に上に表示">\(backImageName.htmlEscaped)</textarea>
               </label>
+              <div class="back-entry font-controls">
+                <div class="font-control">
+                  <div class="font-control-head">
+                    <span>裏文字サイズ</span>
+                    <span class="font-size-display" data-font-display="textFontSize"></span>
+                  </div>
+                  <div class="font-step-row">
+                    <button class="font-step" type="button" data-font-target="textFontSize" data-font-delta="-2" aria-label="裏文字を小さく"><span>-</span></button>
+                    <button class="font-step" type="button" data-font-target="textFontSize" data-font-delta="2" aria-label="裏文字を大きく"><span>+</span></button>
+                    <button class="font-auto" type="button" data-font-target="textFontSize" data-font-auto="true">自動</button>
+                  </div>
+                </div>
+                <div class="font-control">
+                  <div class="font-control-head">
+                    <span>裏画像上文字サイズ</span>
+                    <span class="font-size-display" data-font-display="imageCaptionFontSize"></span>
+                  </div>
+                  <div class="font-step-row">
+                    <button class="font-step" type="button" data-font-target="imageCaptionFontSize" data-font-delta="-2" aria-label="裏画像上文字を小さく"><span>-</span></button>
+                    <button class="font-step" type="button" data-font-target="imageCaptionFontSize" data-font-delta="2" aria-label="裏画像上文字を大きく"><span>+</span></button>
+                    <button class="font-auto" type="button" data-font-target="imageCaptionFontSize" data-font-auto="true">自動</button>
+                  </div>
+                </div>
+              </div>
               <label id="backImageAttachmentItem" class="file-row back-entry attachment-image-item\(backImageAttachmentClass)">
                 <span class="attachment-image-title">
                   裏に入れる画像ファイル
@@ -2367,14 +2536,6 @@ final class WebAdminServer {
                   \(explanationImageControls)
                 </span>
                 <p class="file-hint">解説の本文の下に表示します。選んだ画像は自動で縮小して保存します。</p>
-              </label>
-              <label class="row-start">
-                表示間隔（分）
-                <input name="intervalMinutes" type="number" min="0.1" step="0.1" value="\(intervalMinutes)">
-              </label>
-              <label>
-                上昇スピード（px/秒）
-                <input name="climbSpeed" type="number" min="40" max="900" step="10" value="\(climbSpeed)">
               </label>
               <label id="category-editor" class="genre-fields">
                 名前カテゴリ
@@ -2433,28 +2594,28 @@ final class WebAdminServer {
                 <span id="categoryEditPanelMount">\(categoryEditPanel)</span>
               </label>
               <label class="full">
-                風船カラー
-                <div class="swatches">
-                  \(colorOptions)
-                </div>
-              </label>
-              <label class="full">
                 風船が這い上がる場所
                 <div class="segmented">
                   \(positionOptions)
                 </div>
               </label>
-              <label>
-                ランダム時の最小秒
-                <input name="randomIntervalMinSeconds" type="number" min="1" step="1" value="\(randomIntervalMinSeconds)">
-              </label>
-              <label>
-                ランダム時の最大秒
-                <input name="randomIntervalMaxSeconds" type="number" min="1" step="1" value="\(randomIntervalMaxSeconds)">
-              </label>
+              <div class="triple-row">
+                <label>
+                  ランダム時の最小秒
+                  <input name="randomIntervalMinSeconds" type="number" min="1" step="1" value="\(randomIntervalMinSeconds)">
+                </label>
+                <label>
+                  ランダム時の最大秒
+                  <input name="randomIntervalMaxSeconds" type="number" min="1" step="1" value="\(randomIntervalMaxSeconds)">
+                </label>
+                <label>
+                  上昇スピード（px/秒）
+                  <input name="climbSpeed" type="number" min="40" max="900" step="10" value="\(climbSpeed)">
+                </label>
+              </div>
               <label class="full">
                 風船サイズ
-                <div class="segmented two">
+                <div class="segmented three">
                   \(sizeOptions)
                 </div>
               </label>
@@ -2519,6 +2680,7 @@ final class WebAdminServer {
     ) -> String {
         let operationStatus = settings.isPaused ? "停止中" : "稼働中"
         let enabledCount = settings.enabledBalloons.count
+        let disabledCount = settings.balloons.count - enabledCount
         let searchValue = itemNumberSearch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let selectedSort = normalizedListSort(listSort)
         let selectedGenreFilter = normalizedListFilterValue(genreFilter)
@@ -2531,12 +2693,15 @@ final class WebAdminServer {
             selectedName: selectedSmallCategoryFilter,
             selectedGenreName: selectedGenreFilter
         )
-        let startAllButton = settings.canRestoreAllStopState
+        let startAllButton = disabledCount > 0
             ? "<a class=\"button primary\" href=\"/toggle-all-balloons?enabled=1\">全商品停止を解除</a>"
             : "<span class=\"button disabled-control\">全商品停止を解除</span>"
-        let stopAllButton = enabledCount > 0
-            ? "<a class=\"button danger\" href=\"/toggle-all-balloons?enabled=0\">全商品を停止</a>"
-            : "<span class=\"button disabled-control\">全商品を停止</span>"
+        let resumeAllButton = settings.balloons.isEmpty
+            ? "<span class=\"button disabled-control\">全風船を再開</span>"
+            : "<a class=\"button primary\" href=\"/resume-all-balloons\">全風船を再開</a>"
+        let stopAllButton = settings.balloons.isEmpty
+            ? "<span class=\"button disabled-control\">全商品を停止</span>"
+            : "<a class=\"button danger\" href=\"/toggle-all-balloons?enabled=0\">全商品を停止</a>"
 
         return """
         <section class="panel">
@@ -2546,6 +2711,7 @@ final class WebAdminServer {
               <p class="heading-meta">全体状態: \(operationStatus) / 稼働中の風船: \(enabledCount)件</p>
             </div>
             <div class="actions">
+              \(resumeAllButton)
               \(startAllButton)
               \(stopAllButton)
             </div>
@@ -2700,10 +2866,14 @@ final class WebAdminServer {
             return "全商品を停止しました"
         case "allRestored":
             return "全商品停止前の状態に戻しました"
+        case "allResumed":
+            return "全風船を再開しました"
         case "genreStopped":
             return "大カテゴリ内の商品を停止しました"
         case "genreRestored":
             return "大カテゴリ内の商品停止を解除しました"
+        case "genreResumed":
+            return "大カテゴリ内の商品を再開しました"
         case "categoryUpdated":
             return "カテゴリを修正しました"
         case "categoryDeleted":
@@ -2801,7 +2971,7 @@ final class WebAdminServer {
             let checked = option.name == selectedName ? " checked" : ""
             return """
             <label class="swatch" title="\(option.name.htmlEscaped)">
-              <input type="radio" name="colorName" value="\(option.name.htmlEscaped)"\(checked)>
+              <input type="radio" name="colorName" value="\(option.name.htmlEscaped)" data-start-hex="\(option.startHex.htmlEscaped)" data-end-hex="\(option.endHex.htmlEscaped)"\(checked)>
               <span style="background: linear-gradient(135deg, \(option.startHex), \(option.endHex));"></span>
             </label>
             """
@@ -2846,6 +3016,21 @@ final class WebAdminServer {
         value > 0 ? String(format: "%.0f", value) : "0"
     }
 
+    private func previewSizeClass(for sizeName: String) -> String {
+        switch sizeName {
+        case "ラージ":
+            return " large"
+        case "特大":
+            return " extra-large"
+        default:
+            return ""
+        }
+    }
+
+    private func previewScale(for sizeName: String) -> Double {
+        OverlaySettings.sizeOptions.first(where: { $0.name == sizeName })?.scale ?? 1.0
+    }
+
     private func previewTextFontSize(for balloon: BalloonProfile, large: Bool) -> String {
         if balloon.textFontSize > 0 {
             return String(format: "%.0f", balloon.textFontSize * (large ? 2.0 : 1.0))
@@ -2853,11 +3038,27 @@ final class WebAdminServer {
         return large ? "78" : "26"
     }
 
+    private func previewTextFontSize(for balloon: BalloonProfile) -> String {
+        if balloon.textFontSize > 0 {
+            return String(format: "%.0f", balloon.textFontSize * previewScale(for: balloon.sizeName))
+        }
+        let scale = previewScale(for: balloon.sizeName)
+        let baseSize = scale > 1 ? 39.0 : 26.0
+        return String(format: "%.0f", baseSize * scale)
+    }
+
     private func previewImageCaptionFontSize(for balloon: BalloonProfile, large: Bool) -> String {
         if balloon.imageCaptionFontSize > 0 {
             return String(format: "%.0f", balloon.imageCaptionFontSize * (large ? 2.0 : 1.0))
         }
         return large ? "24" : "12"
+    }
+
+    private func previewImageCaptionFontSize(for balloon: BalloonProfile) -> String {
+        if balloon.imageCaptionFontSize > 0 {
+            return String(format: "%.0f", balloon.imageCaptionFontSize * previewScale(for: balloon.sizeName))
+        }
+        return String(format: "%.0f", 12 * previewScale(for: balloon.sizeName))
     }
 
     private func frontDisplayText(for balloon: BalloonProfile) -> String {
@@ -2993,15 +3194,19 @@ final class WebAdminServer {
             let startGenreButton = disabledCount > 0
                 ? "<a class=\"button primary\" href=\"/toggle-genre-balloons?genre=\(encodedGenreName)&enabled=1\">全商品停止を解除</a>"
                 : "<span class=\"button disabled-control\">全商品停止を解除</span>"
-            let stopGenreButton = enabledCount > 0
-                ? "<a class=\"button danger\" href=\"/toggle-genre-balloons?genre=\(encodedGenreName)&enabled=0\">全商品を停止</a>"
-                : "<span class=\"button disabled-control\">全商品を停止</span>"
+            let resumeGenreButton = balloons.isEmpty
+                ? "<span class=\"button disabled-control\">このカテゴリを再開</span>"
+                : "<a class=\"button primary\" href=\"/resume-genre-balloons?genre=\(encodedGenreName)\">このカテゴリを再開</a>"
+            let stopGenreButton = balloons.isEmpty
+                ? "<span class=\"button disabled-control\">全商品を停止</span>"
+                : "<a class=\"button danger\" href=\"/toggle-genre-balloons?genre=\(encodedGenreName)&enabled=0\">全商品を停止</a>"
             return """
             <section class="genre-group">
               <div class="genre-heading">
                 <h3 class="genre-title-pill">大カテゴリ: \(genreName.htmlEscaped)</h3>
                 <div class="genre-actions">
                   <span class="genre-count">\(balloons.count)件 / 稼働中 \(enabledCount)件</span>
+                  \(resumeGenreButton)
                   \(startGenreButton)
                   \(stopGenreButton)
                 </div>

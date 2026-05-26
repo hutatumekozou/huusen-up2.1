@@ -162,7 +162,8 @@ final class OverlaySettings {
 
     static let sizeOptions: [BalloonSizeOption] = [
         BalloonSizeOption(name: "標準", scale: 1.0),
-        BalloonSizeOption(name: "ラージ", scale: 2.0)
+        BalloonSizeOption(name: "ラージ", scale: 2.0),
+        BalloonSizeOption(name: "特大", scale: 3.0)
     ]
 
     private let defaults: UserDefaults
@@ -234,8 +235,8 @@ final class OverlaySettings {
         if randomIntervalMaxSeconds < randomIntervalMinSeconds {
             randomIntervalMaxSeconds = max(randomIntervalMinSeconds, 600)
         }
-        if defaults.object(forKey: Keys.climbSpeed) == nil || climbSpeed <= 0 || climbSpeed == 300 {
-            climbSpeed = 350
+        if defaults.object(forKey: Keys.climbSpeed) == nil || climbSpeed <= 0 || climbSpeed == 300 || climbSpeed == 350 {
+            climbSpeed = 400
         }
         migrateLegacyBalloonIfNeeded()
         assignMissingItemNumbersIfNeeded()
@@ -257,11 +258,12 @@ final class OverlaySettings {
     }
 
     func nextDisplayInterval() -> TimeInterval {
-        guard activeBalloon.positionName == "ランダム" else {
-            return displayInterval
-        }
+        let enabledCount = max(enabledBalloons.count, 1)
+        let minSeconds = max(randomIntervalMinSeconds, 1)
+        let maxSecondsForOneCycle = max(randomIntervalMaxSeconds, minSeconds)
+        let maxSecondsPerBalloon = max(minSeconds, maxSecondsForOneCycle / Double(enabledCount))
 
-        return TimeInterval.random(in: randomIntervalMinSeconds...randomIntervalMaxSeconds)
+        return TimeInterval.random(in: minSeconds...maxSecondsPerBalloon)
     }
 
     func presentCodexCompletionBalloon(title: String, message: String, details: String, isSuccess: Bool) {
@@ -547,6 +549,9 @@ final class OverlaySettings {
         if !isEnabled {
             allStopSnapshotEnabledIDs = Set(enabledBalloons.map(\.id))
             saveAllStopSnapshot()
+        } else {
+            allStopSnapshotEnabledIDs.removeAll()
+            saveAllStopSnapshot()
         }
 
         for index in balloons.indices {
@@ -768,10 +773,10 @@ final class OverlaySettings {
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
-            positionName: "中央",
+            positionName: "ランダム",
             sizeName: "標準",
             pausesAtMiddle: false,
-            middlePauseDuration: 1.0,
+            middlePauseDuration: 15.0,
             isEnabled: true,
             isFavorite: false,
             correctCount: 0,
@@ -805,10 +810,10 @@ final class OverlaySettings {
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
-            positionName: "中央",
+            positionName: "ランダム",
             sizeName: "標準",
             pausesAtMiddle: false,
-            middlePauseDuration: 1.0,
+            middlePauseDuration: 15.0,
             isEnabled: true,
             isFavorite: false,
             correctCount: 0,

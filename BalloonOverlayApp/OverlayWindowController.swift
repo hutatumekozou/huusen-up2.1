@@ -12,6 +12,17 @@ struct OverlayScroll {
     let deltaY: CGFloat
 }
 
+struct OverlayExplanationScroll {
+    let screenFrame: CGRect
+    let deltaY: CGFloat
+}
+
+struct OverlayExplanationDrag {
+    let screenFrame: CGRect
+    let point: CGPoint
+    let phase: OverlayDragPhase
+}
+
 enum OverlayDragPhase {
     case began
     case changed
@@ -34,6 +45,8 @@ struct OverlayInteractionFrames {
     var explanationBubble: CGRect = .zero
     var explanationScrollArea: CGRect = .zero
     var explanationCloseButton: CGRect = .zero
+    var explanationZoomOutButton: CGRect = .zero
+    var explanationZoomInButton: CGRect = .zero
     var imagePreview: CGRect = .zero
     var isShowingExplanation = false
     var isShowingImagePreview = false
@@ -45,6 +58,8 @@ struct OverlayInteractionFrames {
         if isShowingExplanation {
             return explanationBubble.contains(point)
                 || explanationCloseButton.contains(point)
+                || explanationZoomOutButton.contains(point)
+                || explanationZoomInButton.contains(point)
         }
         return balloon.contains(point)
             || image.contains(point)
@@ -54,15 +69,6 @@ struct OverlayInteractionFrames {
     }
 
     func shouldPassThroughToSubview(_ point: CGPoint) -> Bool {
-        if isShowingExplanation {
-            let scrollerHitFrame = CGRect(
-                x: explanationScrollArea.maxX - 22,
-                y: explanationScrollArea.minY,
-                width: 22,
-                height: explanationScrollArea.height
-            )
-            return scrollerHitFrame.contains(point)
-        }
         return false
     }
 
@@ -80,8 +86,27 @@ struct OverlayInteractionFrames {
         isShowingImagePreview && imagePreview.contains(point)
     }
 
+    func shouldSendScrollToExplanation(_ point: CGPoint) -> Bool {
+        isShowingExplanation && explanationScrollArea.contains(point)
+    }
+
     func shouldSendDragToOverlay(_ point: CGPoint) -> Bool {
         isShowingImagePreview && imagePreview.contains(point)
+    }
+
+    func shouldSendDragToExplanation(_ point: CGPoint) -> Bool {
+        isShowingExplanation
+            && explanationScrollArea.contains(point)
+            && !explanationCloseButton.contains(point)
+            && !explanationZoomOutButton.contains(point)
+            && !explanationZoomInButton.contains(point)
+    }
+
+    func shouldSendClickToExplanationControl(_ point: CGPoint) -> Bool {
+        isShowingExplanation
+            && (explanationCloseButton.contains(point)
+                || explanationZoomOutButton.contains(point)
+                || explanationZoomInButton.contains(point))
     }
 }
 
@@ -115,8 +140,20 @@ final class OverlayInteractionRegistry {
         framesByScreen[key(for: screenFrame)]?.shouldSendScrollToOverlay(point) ?? false
     }
 
+    func shouldSendScrollToExplanation(screenFrame: CGRect, point: CGPoint) -> Bool {
+        framesByScreen[key(for: screenFrame)]?.shouldSendScrollToExplanation(point) ?? false
+    }
+
     func shouldSendDragToOverlay(screenFrame: CGRect, point: CGPoint) -> Bool {
         framesByScreen[key(for: screenFrame)]?.shouldSendDragToOverlay(point) ?? false
+    }
+
+    func shouldSendDragToExplanation(screenFrame: CGRect, point: CGPoint) -> Bool {
+        framesByScreen[key(for: screenFrame)]?.shouldSendDragToExplanation(point) ?? false
+    }
+
+    func shouldSendClickToExplanationControl(screenFrame: CGRect, point: CGPoint) -> Bool {
+        framesByScreen[key(for: screenFrame)]?.shouldSendClickToExplanationControl(point) ?? false
     }
 
     func sameScreen(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
@@ -131,12 +168,17 @@ final class OverlayInteractionRegistry {
 extension Notification.Name {
     static let overlayClick = Notification.Name("BalloonOverlayApp.overlayClick")
     static let overlayScroll = Notification.Name("BalloonOverlayApp.overlayScroll")
+    static let overlayExplanationScroll = Notification.Name("BalloonOverlayApp.overlayExplanationScroll")
+    static let overlayExplanationDrag = Notification.Name("BalloonOverlayApp.overlayExplanationDrag")
     static let overlayDrag = Notification.Name("BalloonOverlayApp.overlayDrag")
     static let overlayInteractionFramesChanged = Notification.Name("BalloonOverlayApp.overlayInteractionFramesChanged")
 }
 
 final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content> {
     private var screenFrame: CGRect
+    private var isDraggingExplanationScroller = false
+    private var explanationDragStartPoint = CGPoint.zero
+    private var explanationDragDidMove = false
 
     init(rootView: Content, screenFrame: CGRect) {
         self.screenFrame = screenFrame
@@ -171,6 +213,25 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
             return
         }
 
+        if OverlayInteractionRegistry.shared.shouldSendClickToExplanationControl(screenFrame: screenFrame, point: point) {
+            NotificationCenter.default.post(
+                name: .overlayClick,
+                object: OverlayClick(screenFrame: screenFrame, point: point)
+            )
+            return
+        }
+
+        isDraggingExplanationScroller = OverlayInteractionRegistry.shared.shouldSendDragToExplanation(screenFrame: screenFrame, point: point)
+        if isDraggingExplanationScroller {
+            explanationDragStartPoint = point
+            explanationDragDidMove = false
+            NotificationCenter.default.post(
+                name: .overlayExplanationDrag,
+                object: OverlayExplanationDrag(screenFrame: screenFrame, point: point, phase: .began)
+            )
+            return
+        }
+
         if OverlayInteractionRegistry.shared.shouldSendDragToOverlay(screenFrame: screenFrame, point: point) {
             NotificationCenter.default.post(
                 name: .overlayDrag,
@@ -186,6 +247,17 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
 
     override func mouseDragged(with event: NSEvent) {
         let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
+        if isDraggingExplanationScroller {
+            if hypot(point.x - explanationDragStartPoint.x, point.y - explanationDragStartPoint.y) > 5 {
+                explanationDragDidMove = true
+            }
+            NotificationCenter.default.post(
+                name: .overlayExplanationDrag,
+                object: OverlayExplanationDrag(screenFrame: screenFrame, point: point, phase: .changed)
+            )
+            return
+        }
+
         guard OverlayInteractionRegistry.shared.shouldSendDragToOverlay(screenFrame: screenFrame, point: point) else {
             super.mouseDragged(with: event)
             return
@@ -199,6 +271,22 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
 
     override func mouseUp(with event: NSEvent) {
         let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
+        if isDraggingExplanationScroller {
+            NotificationCenter.default.post(
+                name: .overlayExplanationDrag,
+                object: OverlayExplanationDrag(screenFrame: screenFrame, point: point, phase: .ended)
+            )
+            if !explanationDragDidMove {
+                NotificationCenter.default.post(
+                    name: .overlayClick,
+                    object: OverlayClick(screenFrame: screenFrame, point: point)
+                )
+            }
+            isDraggingExplanationScroller = false
+            explanationDragDidMove = false
+            return
+        }
+
         if OverlayInteractionRegistry.shared.shouldSendDragToOverlay(screenFrame: screenFrame, point: point) {
             NotificationCenter.default.post(
                 name: .overlayDrag,
@@ -217,6 +305,17 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
                 object: OverlayScroll(
                     screenFrame: screenFrame,
                     deltaX: event.scrollingDeltaX,
+                    deltaY: event.scrollingDeltaY
+                )
+            )
+            return
+        }
+
+        if OverlayInteractionRegistry.shared.shouldSendScrollToExplanation(screenFrame: screenFrame, point: point) {
+            NotificationCenter.default.post(
+                name: .overlayExplanationScroll,
+                object: OverlayExplanationScroll(
+                    screenFrame: screenFrame,
                     deltaY: event.scrollingDeltaY
                 )
             )
