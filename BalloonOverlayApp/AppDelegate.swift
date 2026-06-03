@@ -6,8 +6,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var webAdminServer = WebAdminServer(
         settings: settings,
         showNow: { [weak self] in
-            guard let self, self.settings.hasEnabledBalloons else { return }
-            self.overlayController.show()
+            guard let self, self.settings.hasDisplayableBalloon else { return }
+            self.overlayController.show { [weak self] in
+                self?.settings.clearTemporaryBalloon()
+            }
         },
         showCodexCompletion: { [weak self] title, message, details, isSuccess in
             guard let self else { return }

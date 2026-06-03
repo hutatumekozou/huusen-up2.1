@@ -14,11 +14,19 @@ struct BalloonProfile: Codable, Identifiable {
     var backImageDataURL: String?
     var textFontSize: Double
     var imageCaptionFontSize: Double
+    var imageScale: Double
+    var textOffsetX: Double
+    var textOffsetY: Double
+    var imageCaptionOffsetX: Double
+    var imageCaptionOffsetY: Double
     var genreName: String
+    var middleCategoryName: String
     var smallCategoryName: String
     var colorName: String
     var colorStartHex: String
     var colorEndHex: String
+    var customBalloonDesignDataURL: String?
+    var customBalloonDesignScale: Double
     var positionName: String
     var sizeName: String
     var pausesAtMiddle: Bool
@@ -44,11 +52,19 @@ struct BalloonProfile: Codable, Identifiable {
         backImageDataURL: String?,
         textFontSize: Double,
         imageCaptionFontSize: Double,
+        imageScale: Double,
+        textOffsetX: Double,
+        textOffsetY: Double,
+        imageCaptionOffsetX: Double,
+        imageCaptionOffsetY: Double,
         genreName: String,
+        middleCategoryName: String,
         smallCategoryName: String,
         colorName: String,
         colorStartHex: String,
         colorEndHex: String,
+        customBalloonDesignDataURL: String?,
+        customBalloonDesignScale: Double,
         positionName: String,
         sizeName: String,
         pausesAtMiddle: Bool,
@@ -73,11 +89,19 @@ struct BalloonProfile: Codable, Identifiable {
         self.backImageDataURL = backImageDataURL
         self.textFontSize = textFontSize
         self.imageCaptionFontSize = imageCaptionFontSize
+        self.imageScale = imageScale
+        self.textOffsetX = textOffsetX
+        self.textOffsetY = textOffsetY
+        self.imageCaptionOffsetX = imageCaptionOffsetX
+        self.imageCaptionOffsetY = imageCaptionOffsetY
         self.genreName = genreName
+        self.middleCategoryName = middleCategoryName
         self.smallCategoryName = smallCategoryName
         self.colorName = colorName
         self.colorStartHex = colorStartHex
         self.colorEndHex = colorEndHex
+        self.customBalloonDesignDataURL = customBalloonDesignDataURL
+        self.customBalloonDesignScale = customBalloonDesignScale
         self.positionName = positionName
         self.sizeName = sizeName
         self.pausesAtMiddle = pausesAtMiddle
@@ -105,11 +129,26 @@ struct BalloonProfile: Codable, Identifiable {
         backImageDataURL = try container.decodeIfPresent(String.self, forKey: .backImageDataURL)
         textFontSize = try container.decodeIfPresent(Double.self, forKey: .textFontSize) ?? 0
         imageCaptionFontSize = try container.decodeIfPresent(Double.self, forKey: .imageCaptionFontSize) ?? 0
+        imageScale = try container.decodeIfPresent(Double.self, forKey: .imageScale) ?? 1.0
+        textOffsetX = try container.decodeIfPresent(Double.self, forKey: .textOffsetX) ?? 0
+        textOffsetY = try container.decodeIfPresent(Double.self, forKey: .textOffsetY) ?? 0
+        imageCaptionOffsetX = try container.decodeIfPresent(Double.self, forKey: .imageCaptionOffsetX) ?? 0
+        imageCaptionOffsetY = try container.decodeIfPresent(Double.self, forKey: .imageCaptionOffsetY) ?? 0
         genreName = try container.decodeIfPresent(String.self, forKey: .genreName) ?? "未分類"
+        middleCategoryName = try container.decodeIfPresent(String.self, forKey: .middleCategoryName) ?? ""
         smallCategoryName = try container.decodeIfPresent(String.self, forKey: .smallCategoryName) ?? ""
-        colorName = try container.decode(String.self, forKey: .colorName)
-        colorStartHex = try container.decode(String.self, forKey: .colorStartHex)
-        colorEndHex = try container.decode(String.self, forKey: .colorEndHex)
+        let decodedColorName = try container.decode(String.self, forKey: .colorName)
+        if decodedColorName == "ホワイト" {
+            colorName = "濃グレー"
+            colorStartHex = "#6b7280"
+            colorEndHex = "#374151"
+        } else {
+            colorName = decodedColorName
+            colorStartHex = try container.decode(String.self, forKey: .colorStartHex)
+            colorEndHex = try container.decode(String.self, forKey: .colorEndHex)
+        }
+        customBalloonDesignDataURL = try container.decodeIfPresent(String.self, forKey: .customBalloonDesignDataURL)
+        customBalloonDesignScale = try container.decodeIfPresent(Double.self, forKey: .customBalloonDesignScale) ?? 1.0
         positionName = try container.decodeIfPresent(String.self, forKey: .positionName) ?? "中央"
         sizeName = try container.decodeIfPresent(String.self, forKey: .sizeName) ?? "標準"
         pausesAtMiddle = try container.decodeIfPresent(Bool.self, forKey: .pausesAtMiddle) ?? false
@@ -140,6 +179,8 @@ struct BalloonSizeOption {
 }
 
 final class OverlaySettings {
+    static let customBalloonDesignName = "自作デザイン"
+
     static let colorOptions: [BalloonColorOption] = [
         BalloonColorOption(name: "レッド", startHex: "#ff4770", endHex: "#d90d31"),
         BalloonColorOption(name: "ピンク", startHex: "#ff6ec7", endHex: "#d72f91"),
@@ -149,14 +190,16 @@ final class OverlaySettings {
         BalloonColorOption(name: "ミント", startHex: "#45d6c5", endHex: "#149b90"),
         BalloonColorOption(name: "ブルー", startHex: "#4da3ff", endHex: "#1769e0"),
         BalloonColorOption(name: "パープル", startHex: "#a78bfa", endHex: "#6d45d8"),
-        BalloonColorOption(name: "ホワイト", startHex: "#ffffff", endHex: "#dfe4ea"),
+        BalloonColorOption(name: "ゴールド", startHex: "#ffd766", endHex: "#b77900"),
+        BalloonColorOption(name: "シルバー", startHex: "#f8fafc", endHex: "#94a3b8"),
+        BalloonColorOption(name: "濃グレー", startHex: "#6b7280", endHex: "#374151"),
         BalloonColorOption(name: "ブラック", startHex: "#5b6472", endHex: "#171a21")
     ]
 
     static let positionOptions: [BalloonPositionOption] = [
-        BalloonPositionOption(name: "左", ratio: 0.2),
+        BalloonPositionOption(name: "左", ratio: -0.08),
         BalloonPositionOption(name: "中央", ratio: 0.5),
-        BalloonPositionOption(name: "右", ratio: 0.8),
+        BalloonPositionOption(name: "右", ratio: 1.08),
         BalloonPositionOption(name: "ランダム", ratio: nil)
     ]
 
@@ -172,6 +215,7 @@ final class OverlaySettings {
     var randomIntervalMinSeconds: TimeInterval
     var randomIntervalMaxSeconds: TimeInterval
     var climbSpeed: Double
+    var launchPositionName: String
     var balloons: [BalloonProfile]
     var activeBalloonID: UUID?
     var isPaused: Bool
@@ -184,6 +228,10 @@ final class OverlaySettings {
 
     var hasEnabledBalloons: Bool {
         !enabledBalloons.isEmpty
+    }
+
+    var hasDisplayableBalloon: Bool {
+        temporaryBalloon != nil || hasEnabledBalloons
     }
 
     var canRestoreAllStopState: Bool {
@@ -212,6 +260,7 @@ final class OverlaySettings {
         randomIntervalMinSeconds = defaults.double(forKey: Keys.randomIntervalMinSeconds)
         randomIntervalMaxSeconds = defaults.double(forKey: Keys.randomIntervalMaxSeconds)
         climbSpeed = defaults.double(forKey: Keys.climbSpeed)
+        launchPositionName = defaults.string(forKey: Keys.launchPositionName) ?? "ランダム"
         activeBalloonID = defaults.string(forKey: Keys.activeBalloonID).flatMap(UUID.init(uuidString:))
         isPaused = defaults.bool(forKey: Keys.isPaused)
         allStopSnapshotEnabledIDs = Set(
@@ -238,7 +287,12 @@ final class OverlaySettings {
         if defaults.object(forKey: Keys.climbSpeed) == nil || climbSpeed <= 0 || climbSpeed == 300 || climbSpeed == 350 {
             climbSpeed = 400
         }
+        if !Self.positionOptions.contains(where: { $0.name == launchPositionName }) {
+            launchPositionName = "ランダム"
+        }
         migrateLegacyBalloonIfNeeded()
+        migrateGenderMiddleCategoriesIfNeeded()
+        normalizeGenderedSmallCategoriesIfNeeded()
         assignMissingItemNumbersIfNeeded()
     }
 
@@ -253,6 +307,18 @@ final class OverlaySettings {
         let maxSeconds = max(randomIntervalMaxSeconds, minSeconds)
         self.randomIntervalMinSeconds = minSeconds
         self.randomIntervalMaxSeconds = maxSeconds
+        self.climbSpeed = min(max(climbSpeed, 40), 900)
+        save()
+    }
+
+    func setLaunchPositionName(_ positionName: String) {
+        updateLaunchSettings(positionName: positionName, climbSpeed: climbSpeed)
+    }
+
+    func updateLaunchSettings(positionName: String, climbSpeed: Double) {
+        let trimmedPositionName = positionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let position = Self.positionOptions.first(where: { $0.name == trimmedPositionName }) ?? Self.positionOptions[3]
+        launchPositionName = position.name
         self.climbSpeed = min(max(climbSpeed, 40), 900)
         save()
     }
@@ -289,11 +355,19 @@ final class OverlaySettings {
             backImageDataURL: nil,
             textFontSize: 0,
             imageCaptionFontSize: 0,
+            imageScale: 1.0,
+            textOffsetX: 0,
+            textOffsetY: 0,
+            imageCaptionOffsetX: 0,
+            imageCaptionOffsetY: 0,
             genreName: "Codex通知",
+            middleCategoryName: "",
             smallCategoryName: "",
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
+            customBalloonDesignDataURL: nil,
+            customBalloonDesignScale: 1.0,
             positionName: "中央",
             sizeName: "ラージ",
             pausesAtMiddle: true,
@@ -311,6 +385,10 @@ final class OverlaySettings {
         temporaryBalloon = nil
     }
 
+    func presentTemporaryBalloon(_ balloon: BalloonProfile) {
+        temporaryBalloon = balloon
+    }
+
     func addBalloon(
         title: String,
         text: String,
@@ -323,9 +401,17 @@ final class OverlaySettings {
         backImageDataURL: String?,
         textFontSize: Double,
         imageCaptionFontSize: Double,
+        imageScale: Double,
+        textOffsetX: Double,
+        textOffsetY: Double,
+        imageCaptionOffsetX: Double,
+        imageCaptionOffsetY: Double,
         genreName: String,
+        middleCategoryName: String,
         smallCategoryName: String,
         colorName: String,
+        customBalloonDesignDataURL: String?,
+        customBalloonDesignScale: Double,
         positionName: String,
         sizeName: String,
         pausesAtMiddle: Bool,
@@ -339,31 +425,54 @@ final class OverlaySettings {
         let trimmedExplanationText = explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedExplanationImageDataURLs = Self.cleanedExplanationImageDataURLs(explanationImageDataURLs)
         let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedImageName = imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let trimmedImageDataURL = imageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let trimmedBackImageName = backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let trimmedBackImageDataURL = backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let trimmedGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSmallCategoryName = Self.normalizedSmallCategoryName(smallCategoryName, middleCategoryName: trimmedMiddleCategoryName)
+        let trimmedCustomBalloonDesignDataURL = customBalloonDesignDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedColorName = trimmedCustomBalloonDesignDataURL != nil && colorName == Self.customBalloonDesignName
+            ? Self.customBalloonDesignName
+            : color.name
+        let clampedCustomBalloonDesignScale = Self.clampedCustomBalloonDesignScale(customBalloonDesignScale)
         let clampedTextFontSize = Self.clampedFontSize(textFontSize)
         let clampedImageCaptionFontSize = Self.clampedFontSize(imageCaptionFontSize)
+        let clampedImageScale = Self.clampedImageScale(imageScale)
+        let clampedTextOffsetX = Self.clampedPositionOffset(textOffsetX)
+        let clampedTextOffsetY = Self.clampedPositionOffset(textOffsetY)
+        let clampedImageCaptionOffsetX = Self.clampedPositionOffset(imageCaptionOffsetX)
+        let clampedImageCaptionOffsetY = Self.clampedPositionOffset(imageCaptionOffsetY)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
 
         let balloon = BalloonProfile(
             id: UUID(),
             itemNumber: nextItemNumber(),
             title: trimmedTitle.isEmpty ? "無題の風船" : trimmedTitle,
-            text: trimmedText.isEmpty ? "🎈" : trimmedText,
+            text: trimmedText.isEmpty && trimmedImageName == nil && trimmedImageDataURL == nil ? "🎈" : trimmedText,
             explanationText: trimmedExplanationText,
             explanationImageDataURLs: trimmedExplanationImageDataURLs,
-            imageName: imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-            imageDataURL: imageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            imageName: trimmedImageName,
+            imageDataURL: trimmedImageDataURL,
             backText: trimmedBackText,
-            backImageName: backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-            backImageDataURL: backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            backImageName: trimmedBackImageName,
+            backImageDataURL: trimmedBackImageDataURL,
             textFontSize: clampedTextFontSize,
             imageCaptionFontSize: clampedImageCaptionFontSize,
+            imageScale: clampedImageScale,
+            textOffsetX: clampedTextOffsetX,
+            textOffsetY: clampedTextOffsetY,
+            imageCaptionOffsetX: clampedImageCaptionOffsetX,
+            imageCaptionOffsetY: clampedImageCaptionOffsetY,
             genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
+            middleCategoryName: trimmedMiddleCategoryName,
             smallCategoryName: trimmedSmallCategoryName,
-            colorName: color.name,
+            colorName: resolvedColorName,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
+            customBalloonDesignDataURL: trimmedCustomBalloonDesignDataURL,
+            customBalloonDesignScale: clampedCustomBalloonDesignScale,
             positionName: position.name,
             sizeName: size.name,
             pausesAtMiddle: pausesAtMiddle,
@@ -394,9 +503,17 @@ final class OverlaySettings {
         backImageDataURL: String?,
         textFontSize: Double,
         imageCaptionFontSize: Double,
+        imageScale: Double,
+        textOffsetX: Double,
+        textOffsetY: Double,
+        imageCaptionOffsetX: Double,
+        imageCaptionOffsetY: Double,
         genreName: String,
+        middleCategoryName: String,
         smallCategoryName: String,
         colorName: String,
+        customBalloonDesignDataURL: String?,
+        customBalloonDesignScale: Double,
         positionName: String,
         sizeName: String,
         pausesAtMiddle: Bool,
@@ -412,10 +529,25 @@ final class OverlaySettings {
         let trimmedExplanationText = explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedExplanationImageDataURLs = Self.cleanedExplanationImageDataURLs(explanationImageDataURLs)
         let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedImageName = imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let trimmedImageDataURL = imageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let trimmedBackImageName = backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let trimmedBackImageDataURL = backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let trimmedGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSmallCategoryName = Self.normalizedSmallCategoryName(smallCategoryName, middleCategoryName: trimmedMiddleCategoryName)
+        let trimmedCustomBalloonDesignDataURL = customBalloonDesignDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let resolvedColorName = trimmedCustomBalloonDesignDataURL != nil && colorName == Self.customBalloonDesignName
+            ? Self.customBalloonDesignName
+            : color.name
+        let clampedCustomBalloonDesignScale = Self.clampedCustomBalloonDesignScale(customBalloonDesignScale)
         let clampedTextFontSize = Self.clampedFontSize(textFontSize)
         let clampedImageCaptionFontSize = Self.clampedFontSize(imageCaptionFontSize)
+        let clampedImageScale = Self.clampedImageScale(imageScale)
+        let clampedTextOffsetX = Self.clampedPositionOffset(textOffsetX)
+        let clampedTextOffsetY = Self.clampedPositionOffset(textOffsetY)
+        let clampedImageCaptionOffsetX = Self.clampedPositionOffset(imageCaptionOffsetX)
+        let clampedImageCaptionOffsetY = Self.clampedPositionOffset(imageCaptionOffsetY)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
         let createdAt = balloons[index].createdAt
         let isEnabled = balloons[index].isEnabled
@@ -429,21 +561,29 @@ final class OverlaySettings {
             id: id,
             itemNumber: itemNumber,
             title: trimmedTitle.isEmpty ? "無題の風船" : trimmedTitle,
-            text: trimmedText.isEmpty ? "🎈" : trimmedText,
+            text: trimmedText.isEmpty && trimmedImageName == nil && trimmedImageDataURL == nil ? "🎈" : trimmedText,
             explanationText: trimmedExplanationText,
             explanationImageDataURLs: trimmedExplanationImageDataURLs,
-            imageName: imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-            imageDataURL: imageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            imageName: trimmedImageName,
+            imageDataURL: trimmedImageDataURL,
             backText: trimmedBackText,
-            backImageName: backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-            backImageDataURL: backImageDataURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            backImageName: trimmedBackImageName,
+            backImageDataURL: trimmedBackImageDataURL,
             textFontSize: clampedTextFontSize,
             imageCaptionFontSize: clampedImageCaptionFontSize,
+            imageScale: clampedImageScale,
+            textOffsetX: clampedTextOffsetX,
+            textOffsetY: clampedTextOffsetY,
+            imageCaptionOffsetX: clampedImageCaptionOffsetX,
+            imageCaptionOffsetY: clampedImageCaptionOffsetY,
             genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
+            middleCategoryName: trimmedMiddleCategoryName,
             smallCategoryName: trimmedSmallCategoryName,
-            colorName: color.name,
+            colorName: resolvedColorName,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
+            customBalloonDesignDataURL: trimmedCustomBalloonDesignDataURL,
+            customBalloonDesignScale: clampedCustomBalloonDesignScale,
             positionName: position.name,
             sizeName: size.name,
             pausesAtMiddle: pausesAtMiddle,
@@ -466,6 +606,7 @@ final class OverlaySettings {
         } else {
             balloons[index].incorrectCount += 1
         }
+        syncTemporaryBalloonIfNeeded(with: balloons[index])
         activeBalloonID = id
         save()
     }
@@ -477,6 +618,7 @@ final class OverlaySettings {
         } else {
             balloons[index].incorrectCount = max(0, balloons[index].incorrectCount - 1)
         }
+        syncTemporaryBalloonIfNeeded(with: balloons[index])
         activeBalloonID = id
         save()
     }
@@ -488,6 +630,7 @@ final class OverlaySettings {
         } else {
             balloons[index].incorrectCount = max(0, balloons[index].incorrectCount + delta)
         }
+        syncTemporaryBalloonIfNeeded(with: balloons[index])
         activeBalloonID = id
         save()
     }
@@ -495,6 +638,7 @@ final class OverlaySettings {
     func saveAnswerReview(for id: UUID) {
         guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
         balloons[index].lastReviewedAt = Date()
+        syncTemporaryBalloonIfNeeded(with: balloons[index])
         activeBalloonID = id
         save()
     }
@@ -504,6 +648,13 @@ final class OverlaySettings {
         guard balloons.contains(where: { $0.id == id && $0.isEnabled }) else { return }
         activeBalloonID = id
         save()
+    }
+
+    @discardableResult
+    func presentBalloonOnce(id: UUID) -> Bool {
+        guard let balloon = balloons.first(where: { $0.id == id }) else { return false }
+        temporaryBalloon = balloon
+        return true
     }
 
     @discardableResult
@@ -585,6 +736,60 @@ final class OverlaySettings {
         save()
     }
 
+    func setBalloonsEnabled(inGenre genreName: String, middleCategoryName: String, isEnabled: Bool) {
+        let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let targetMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+        var changedIDs: [UUID] = []
+
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonMiddleCategoryName = balloons[index].middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+            guard balloonGenreName == targetGenreName, balloonMiddleCategoryName == targetMiddleCategoryName else { continue }
+
+            balloons[index].isEnabled = isEnabled
+            changedIDs.append(balloons[index].id)
+        }
+
+        guard !changedIDs.isEmpty else { return }
+
+        if isEnabled {
+            activeBalloonID = changedIDs.last
+        } else if let activeBalloonID, changedIDs.contains(activeBalloonID) {
+            self.activeBalloonID = enabledBalloons.last?.id
+        }
+
+        save()
+    }
+
+    func setBalloonsEnabled(inGenre genreName: String, middleCategoryName: String, smallCategoryName: String, isEnabled: Bool) {
+        let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let targetMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+        let targetSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+        var changedIDs: [UUID] = []
+
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonMiddleCategoryName = balloons[index].middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+            let balloonSmallCategoryName = balloons[index].smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+            guard balloonGenreName == targetGenreName,
+                  balloonMiddleCategoryName == targetMiddleCategoryName,
+                  balloonSmallCategoryName == targetSmallCategoryName else { continue }
+
+            balloons[index].isEnabled = isEnabled
+            changedIDs.append(balloons[index].id)
+        }
+
+        guard !changedIDs.isEmpty else { return }
+
+        if isEnabled {
+            activeBalloonID = changedIDs.last
+        } else if let activeBalloonID, changedIDs.contains(activeBalloonID) {
+            self.activeBalloonID = enabledBalloons.last?.id
+        }
+
+        save()
+    }
+
     func renameGenre(from oldName: String, to newName: String) {
         let targetName = oldName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
         let replacementName = newName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
@@ -614,6 +819,7 @@ final class OverlaySettings {
             guard balloonGenreName == targetName else { continue }
 
             balloons[index].genreName = "未分類"
+            balloons[index].middleCategoryName = ""
             balloons[index].smallCategoryName = ""
             didChange = true
         }
@@ -623,17 +829,67 @@ final class OverlaySettings {
         }
     }
 
-    func renameSmallCategory(inGenre genreName: String, from oldName: String, to newName: String) {
+    func renameMiddleCategory(inGenre genreName: String, from oldName: String, to newName: String) {
         let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
-        let targetSmallCategoryName = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetMiddleCategoryName = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
         let replacementName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetMiddleCategoryName.isEmpty, !replacementName.isEmpty, targetMiddleCategoryName != replacementName else { return }
+
+        var didChange = false
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonMiddleCategoryName = balloons[index].middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard balloonGenreName == targetGenreName, balloonMiddleCategoryName == targetMiddleCategoryName else { continue }
+
+            balloons[index].middleCategoryName = replacementName
+            balloons[index].smallCategoryName = Self.normalizedSmallCategoryName(
+                balloons[index].smallCategoryName,
+                middleCategoryName: replacementName
+            )
+            didChange = true
+        }
+
+        if didChange {
+            save()
+        }
+    }
+
+    func deleteMiddleCategory(inGenre genreName: String, named middleCategoryName: String) {
+        let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let targetMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetMiddleCategoryName.isEmpty else { return }
+
+        var didChange = false
+        for index in balloons.indices {
+            let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonMiddleCategoryName = balloons[index].middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard balloonGenreName == targetGenreName, balloonMiddleCategoryName == targetMiddleCategoryName else { continue }
+
+            balloons[index].middleCategoryName = ""
+            balloons[index].smallCategoryName = ""
+            didChange = true
+        }
+
+        if didChange {
+            save()
+        }
+    }
+
+    func renameSmallCategory(inGenre genreName: String, middleCategoryName: String, from oldName: String, to newName: String) {
+        let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let targetMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
+        let targetSmallCategoryName = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let replacementName = Self.normalizedSmallCategoryName(newName, middleCategoryName: targetMiddleCategoryName)
         guard !targetSmallCategoryName.isEmpty, !replacementName.isEmpty, targetSmallCategoryName != replacementName else { return }
 
         var didChange = false
         for index in balloons.indices {
             let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonMiddleCategoryName = balloons[index].middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
             let balloonSmallCategoryName = balloons[index].smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard balloonGenreName == targetGenreName, balloonSmallCategoryName == targetSmallCategoryName else { continue }
+            guard balloonGenreName == targetGenreName,
+                  balloonMiddleCategoryName == targetMiddleCategoryName,
+                  balloonSmallCategoryName == targetSmallCategoryName else { continue }
 
             balloons[index].smallCategoryName = replacementName
             didChange = true
@@ -644,16 +900,20 @@ final class OverlaySettings {
         }
     }
 
-    func deleteSmallCategory(inGenre genreName: String, named smallCategoryName: String) {
+    func deleteSmallCategory(inGenre genreName: String, middleCategoryName: String, named smallCategoryName: String) {
         let targetGenreName = genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+        let targetMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
         let targetSmallCategoryName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !targetSmallCategoryName.isEmpty else { return }
 
         var didChange = false
         for index in balloons.indices {
             let balloonGenreName = balloons[index].genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未分類"
+            let balloonMiddleCategoryName = balloons[index].middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "未指定"
             let balloonSmallCategoryName = balloons[index].smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard balloonGenreName == targetGenreName, balloonSmallCategoryName == targetSmallCategoryName else { continue }
+            guard balloonGenreName == targetGenreName,
+                  balloonMiddleCategoryName == targetMiddleCategoryName,
+                  balloonSmallCategoryName == targetSmallCategoryName else { continue }
 
             balloons[index].smallCategoryName = ""
             didChange = true
@@ -695,6 +955,7 @@ final class OverlaySettings {
         defaults.set(randomIntervalMinSeconds, forKey: Keys.randomIntervalMinSeconds)
         defaults.set(randomIntervalMaxSeconds, forKey: Keys.randomIntervalMaxSeconds)
         defaults.set(climbSpeed, forKey: Keys.climbSpeed)
+        defaults.set(launchPositionName, forKey: Keys.launchPositionName)
         defaults.set(activeBalloonID?.uuidString, forKey: Keys.activeBalloonID)
 
         if let encoded = try? JSONEncoder().encode(balloons) {
@@ -707,12 +968,17 @@ final class OverlaySettings {
             dataURLs
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-                .prefix(4)
+                .prefix(8)
         )
     }
 
     private func saveAllStopSnapshot() {
         defaults.set(allStopSnapshotEnabledIDs.map(\.uuidString), forKey: Keys.allStopSnapshotEnabledIDs)
+    }
+
+    private func syncTemporaryBalloonIfNeeded(with balloon: BalloonProfile) {
+        guard temporaryBalloon?.id == balloon.id else { return }
+        temporaryBalloon = balloon
     }
 
     private func nextItemNumber() -> Int {
@@ -768,11 +1034,19 @@ final class OverlaySettings {
             backImageDataURL: nil,
             textFontSize: 0,
             imageCaptionFontSize: 0,
+            imageScale: 1.0,
+            textOffsetX: 0,
+            textOffsetY: 0,
+            imageCaptionOffsetX: 0,
+            imageCaptionOffsetY: 0,
             genreName: "未分類",
+            middleCategoryName: "",
             smallCategoryName: "",
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
+            customBalloonDesignDataURL: nil,
+            customBalloonDesignScale: 1.0,
             positionName: "ランダム",
             sizeName: "標準",
             pausesAtMiddle: false,
@@ -787,6 +1061,51 @@ final class OverlaySettings {
         balloons = [balloon]
         activeBalloonID = balloon.id
         save()
+    }
+
+    private func migrateGenderMiddleCategoriesIfNeeded() {
+        guard !defaults.bool(forKey: Keys.didMigrateGenderMiddleCategories) else { return }
+
+        var didChange = false
+
+        for index in balloons.indices {
+            guard balloons[index].middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue
+            }
+
+            let smallCategoryName = balloons[index].smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if smallCategoryName.contains("レディース") {
+                balloons[index].middleCategoryName = "レディース"
+                didChange = true
+            } else if smallCategoryName.contains("メンズ") {
+                balloons[index].middleCategoryName = "メンズ"
+                didChange = true
+            }
+        }
+
+        if didChange {
+            save()
+        }
+        defaults.set(true, forKey: Keys.didMigrateGenderMiddleCategories)
+    }
+
+    private func normalizeGenderedSmallCategoriesIfNeeded() {
+        var didChange = false
+
+        for index in balloons.indices {
+            let normalizedName = Self.normalizedSmallCategoryName(
+                balloons[index].smallCategoryName,
+                middleCategoryName: balloons[index].middleCategoryName
+            )
+            guard normalizedName != balloons[index].smallCategoryName else { continue }
+
+            balloons[index].smallCategoryName = normalizedName
+            didChange = true
+        }
+
+        if didChange {
+            save()
+        }
     }
 
     private static func defaultBalloon() -> BalloonProfile {
@@ -805,11 +1124,19 @@ final class OverlaySettings {
             backImageDataURL: nil,
             textFontSize: 0,
             imageCaptionFontSize: 0,
+            imageScale: 1.0,
+            textOffsetX: 0,
+            textOffsetY: 0,
+            imageCaptionOffsetX: 0,
+            imageCaptionOffsetY: 0,
             genreName: "未分類",
+            middleCategoryName: "",
             smallCategoryName: "",
             colorName: color.name,
             colorStartHex: color.startHex,
             colorEndHex: color.endHex,
+            customBalloonDesignDataURL: nil,
+            customBalloonDesignScale: 1.0,
             positionName: "ランダム",
             sizeName: "標準",
             pausesAtMiddle: false,
@@ -825,7 +1152,35 @@ final class OverlaySettings {
 
     private static func clampedFontSize(_ value: Double) -> Double {
         guard value.isFinite, value > 0 else { return 0 }
-        return min(max(value, 8), 90)
+        return min(max(value, 4), 90)
+    }
+
+    private static func clampedCustomBalloonDesignScale(_ value: Double) -> Double {
+        guard value.isFinite else { return 1.0 }
+        return min(max(value, 0.5), 2.5)
+    }
+
+    private static func clampedImageScale(_ value: Double) -> Double {
+        guard value.isFinite else { return 1.0 }
+        return min(max(value, 0.6), 2.0)
+    }
+
+    private static func clampedPositionOffset(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return min(max(value, -0.45), 0.45)
+    }
+
+    private static func normalizedSmallCategoryName(_ smallCategoryName: String, middleCategoryName: String) -> String {
+        let trimmedName = smallCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedMiddleCategoryName = middleCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedMiddleCategoryName == "メンズ" || trimmedMiddleCategoryName == "レディース" else {
+            return trimmedName
+        }
+
+        let normalizedName = trimmedName
+            .replacingOccurrences(of: trimmedMiddleCategoryName, with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizedName.isEmpty ? trimmedName : normalizedName
     }
 }
 
@@ -834,10 +1189,12 @@ private enum Keys {
     static let randomIntervalMinSeconds = "randomIntervalMinSeconds"
     static let randomIntervalMaxSeconds = "randomIntervalMaxSeconds"
     static let climbSpeed = "climbSpeed"
+    static let launchPositionName = "launchPositionName"
     static let balloons = "balloons"
     static let activeBalloonID = "activeBalloonID"
     static let isPaused = "isPaused"
     static let allStopSnapshotEnabledIDs = "allStopSnapshotEnabledIDs"
+    static let didMigrateGenderMiddleCategories = "didMigrateGenderMiddleCategories"
 }
 
 private extension String {

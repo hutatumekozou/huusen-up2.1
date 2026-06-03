@@ -87,22 +87,22 @@ struct BalloonOverlayView: View {
         GeometryReader { proxy in
             let balloon = settings.activeBalloon
             let standardBalloonSize = min(max(proxy.size.width * 0.14, 120), 180)
-            let balloonSize = standardBalloonSize * balloon.sizeScale
-            let minX = balloonSize * 0.72
-            let maxX = max(proxy.size.width - balloonSize * 0.72, minX)
-            let centerX = minX + (maxX - minX) * xRatio
+            let requestedBalloonSize = standardBalloonSize * balloon.sizeScale
+            let balloonSize = fittedBalloonSize(requestedBalloonSize, containerSize: proxy.size)
+            let contentScale = max(0.8, balloonSize / standardBalloonSize)
+            let centerX = fittedCenterX(for: xRatio, balloonSize: balloonSize, containerWidth: proxy.size.width)
             let startY = proxy.size.height + balloonSize
             let endY = -balloonSize
             let middleY = proxy.size.height / 2
             let currentY = yPosition ?? startY
             let explanationText = balloon.explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
             let hasExplanation = !explanationText.isEmpty || !balloon.explanationImageDataURLs.isEmpty
-            let startsVisible = balloon.genreName == "Codex通知"
+            let startsVisible = balloon.genreName == "Codex通知" || balloon.middlePauseDuration >= 999
 
             ZStack {
                 balloonView(
                     size: balloonSize,
-                    contentScale: balloon.sizeScale,
+                    contentScale: contentScale,
                     balloon: balloon,
                     isShowingBack: isShowingBack,
                     hasExplanation: hasExplanation
@@ -136,7 +136,7 @@ struct BalloonOverlayView: View {
                 if startsVisible {
                     hasReachedMiddle = true
                     isPausedAtMiddle = true
-                    middlePauseRemaining = min(max(balloon.middlePauseDuration, 0.1), 30)
+                    middlePauseRemaining = pauseRemaining(for: balloon)
                 }
                 updateInteractionFrames(centerX: centerX, centerY: initialY, size: balloonSize, containerSize: proxy.size)
                 isShowingBack = false
@@ -241,7 +241,7 @@ struct BalloonOverlayView: View {
             yPosition = motionMiddleY
             hasReachedMiddle = true
             isPausedAtMiddle = true
-            middlePauseRemaining = min(max(balloon.middlePauseDuration, 0.1), 30)
+            middlePauseRemaining = pauseRemaining(for: balloon)
             return
         }
 
@@ -473,9 +473,18 @@ struct BalloonOverlayView: View {
         }
 
         if balloonHitFrame.contains(localPoint) {
+            if settings.activeBalloon.middlePauseDuration >= 999 {
+                middlePauseRemaining = nil
+                isPausedAtMiddle = false
+                return
+            }
             middlePauseRemaining = max(middlePauseRemaining ?? 0, 2)
             isPausedAtMiddle = true
         }
+    }
+
+    private func pauseRemaining(for balloon: BalloonProfile) -> Double {
+        balloon.middlePauseDuration >= 999 ? Double.greatestFiniteMagnitude : min(max(balloon.middlePauseDuration, 0.1), 30)
     }
 
     private func openImagePreview(_ image: NSImage) {
@@ -823,11 +832,27 @@ struct BalloonOverlayView: View {
     }
 
     private func resolvedXRatio(for balloon: BalloonProfile) -> Double {
-        if balloon.positionName == "ランダム" {
-            return [0.2, 0.5, 0.8].randomElement() ?? 0.5
+        let positionName = balloon.middlePauseDuration >= 999 ? balloon.positionName : settings.launchPositionName
+        if positionName == "ランダム" {
+            return OverlaySettings.positionOptions.compactMap { $0.ratio }.randomElement() ?? 0.5
         }
 
-        return OverlaySettings.positionOptions.first(where: { $0.name == balloon.positionName })?.ratio ?? 0.5
+        return OverlaySettings.positionOptions.first(where: { $0.name == positionName })?.ratio ?? 0.5
+    }
+
+    private func fittedBalloonSize(_ requestedSize: Double, containerSize: CGSize) -> Double {
+        let maxWidth = max(120, containerSize.width * 0.86)
+        let maxHeight = max(120, containerSize.height / 1.72)
+        return min(requestedSize, maxWidth, maxHeight)
+    }
+
+    private func fittedCenterX(for ratio: Double, balloonSize: Double, containerWidth: Double) -> Double {
+        let minX = balloonSize * 0.72
+        let maxX = max(containerWidth - balloonSize * 0.72, minX)
+        let rawCenterX = minX + (maxX - minX) * ratio
+        let visibleMinX = min(containerWidth / 2, balloonSize * 0.52)
+        let visibleMaxX = max(visibleMinX, containerWidth - balloonSize * 0.52)
+        return min(max(rawCenterX, visibleMinX), visibleMaxX)
     }
 
     private func explanationButtonView(contentScale: Double = 1) -> some View {
@@ -1249,28 +1274,41 @@ struct BalloonOverlayView: View {
     ) -> some View {
         VStack(spacing: 0) {
             ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(hex: balloon.colorStartHex),
-                                Color(hex: balloon.colorEndHex)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                if balloon.colorName == OverlaySettings.customBalloonDesignName,
+                   let customBalloonDesign = balloon.attachedCustomBalloonDesign {
+                    Image(nsImage: customBalloonDesign)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .frame(width: size, height: size)
+                        .scaleEffect(balloon.customBalloonDesignScale)
+                        .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 8)
+                        .zIndex(0)
+                } else {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(hex: balloon.colorStartHex),
+                                    Color(hex: balloon.colorEndHex)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 2))
-                    .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 8)
+                        .overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 2))
+                        .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 8)
 
-                Circle()
-                    .fill(Color.white.opacity(0.35))
-                    .frame(width: size * 0.22, height: size * 0.22)
-                    .offset(x: -size * 0.19, y: -size * 0.18)
+                    Circle()
+                        .fill(Color.white.opacity(0.35))
+                        .frame(width: size * 0.22, height: size * 0.22)
+                        .offset(x: -size * 0.19, y: -size * 0.18)
+                }
 
                 contentView(for: balloon, isShowingBack: isShowingBack, contentSize: size * 0.82, contentScale: contentScale)
                     .frame(width: size * 0.82, height: size * 0.82)
                     .clipShape(Circle())
+                    .zIndex(1)
 
                 if balloon.hasBackSide || hasExplanation {
                     HStack(spacing: 4) {
@@ -1325,15 +1363,33 @@ struct BalloonOverlayView: View {
         let text = isShowingBack ? balloon.backDisplayText : balloon.frontDisplayText
         let imageName = isShowingBack ? balloon.backImageName : balloon.imageName
         let attachedImage = isShowingBack ? balloon.attachedBackImage : balloon.attachedImage
-        let imageCaption = imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let imageCaption = isShowingBack ? balloon.backImageCaptionText : balloon.frontImageCaptionText
 
         if let image = attachedImage {
             let hasBackBadge = balloon.hasBackSide
             let captionLineCount = imageCaption.map { max(1, $0.components(separatedBy: .newlines).count) } ?? 0
             let captionWidth = contentSize * 0.88
-            let captionHeight = contentSize * (captionLineCount > 2 ? 0.32 : (hasBackBadge ? 0.20 : 0.24))
-            let topInset = contentSize * (hasBackBadge ? 0.16 : 0.02)
-            VStack(spacing: max(3, 4 * contentScale)) {
+            let captionHeightRatio = captionLineCount > 2 ? 0.32 : (hasBackBadge ? 0.20 : 0.24)
+            let captionHeight = contentSize * captionHeightRatio
+            let topInsetRatio = hasBackBadge ? 0.16 : 0.02
+            let topInset = contentSize * topInsetRatio
+            let baseImageHeightRatio = imageCaption == nil ? 0.82 : (captionLineCount > 2 ? 0.48 : (hasBackBadge ? 0.54 : 0.62))
+            let imageScale = min(max(balloon.imageScale, 0.6), 2.0)
+            let imageWidthRatio = 0.82 * imageScale
+            let imageHeightRatio = min(1.64, baseImageHeightRatio * imageScale)
+            ZStack(alignment: .top) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(
+                        maxWidth: contentSize * imageWidthRatio,
+                        maxHeight: contentSize * imageHeightRatio
+                    )
+                    .frame(width: contentSize, height: contentSize, alignment: .center)
+                    .offset(x: balloon.imageCaptionOffsetX * contentSize, y: balloon.imageCaptionOffsetY * contentSize)
+                    .zIndex(1)
+
                 if let imageCaption {
                     Text(imageCaption)
                         .font(.system(size: imageCaptionSize(for: imageCaption, balloon: balloon, contentSize: contentSize, width: captionWidth, height: captionHeight, contentScale: contentScale), weight: .bold))
@@ -1344,17 +1400,9 @@ struct BalloonOverlayView: View {
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
                         .frame(width: captionWidth, height: captionHeight, alignment: .center)
+                        .offset(x: balloon.textOffsetX * contentSize, y: balloon.textOffsetY * contentSize)
+                        .zIndex(10)
                 }
-
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(
-                        maxWidth: contentSize * 0.82,
-                        maxHeight: contentSize * (imageCaption == nil ? 0.82 : (captionLineCount > 2 ? 0.48 : (hasBackBadge ? 0.54 : 0.62)))
-                    )
-                Spacer(minLength: 0)
             }
             .padding(.top, topInset)
             .frame(width: contentSize, height: contentSize, alignment: .top)
@@ -1374,6 +1422,7 @@ struct BalloonOverlayView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
                 .padding(12 * contentScale)
+                .offset(x: balloon.textOffsetX * contentSize, y: balloon.textOffsetY * contentSize)
         }
     }
 
@@ -1382,8 +1431,8 @@ struct BalloonOverlayView: View {
     }
 
     private func imageCaptionSize(for text: String, balloon: BalloonProfile, contentSize: Double, width: Double, height: Double, contentScale: Double) -> Double {
-        if balloon.imageCaptionFontSize > 0 {
-            return min(max(balloon.imageCaptionFontSize * contentScale * livePreviewScale(for: contentSize), 8), 140 * contentScale)
+        if balloon.textFontSize > 0 {
+            return min(max(balloon.textFontSize * contentScale * livePreviewScale(for: contentSize), 4), 140 * contentScale)
         }
 
         let maximumSize = min(24 * contentScale, height * 0.44)
@@ -1405,7 +1454,7 @@ struct BalloonOverlayView: View {
 
     private func textSize(for text: String, balloon: BalloonProfile, contentSize: Double, contentScale: Double) -> Double {
         if balloon.textFontSize > 0 {
-            return min(max(balloon.textFontSize * contentScale * livePreviewScale(for: contentSize), 8), 140 * contentScale)
+            return min(max(balloon.textFontSize * contentScale * livePreviewScale(for: contentSize), 4), 140 * contentScale)
         }
 
         let lineCountBudget = max(4, min(8, Int(ceil(Double(text.count) / 7.0))))
@@ -1550,6 +1599,20 @@ private extension BalloonProfile {
         backText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "裏面"
     }
 
+    var frontImageCaptionText: String? {
+        let caption = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if caption.nilIfEmpty != nil, caption != "🎈" {
+            return caption
+        }
+
+        return imageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+
+    var backImageCaptionText: String? {
+        backText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+
     var hasBackSide: Bool {
         backText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
             || backImageName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
@@ -1567,6 +1630,10 @@ private extension BalloonProfile {
 
     var attachedBackImage: NSImage? {
         image(from: backImageDataURL)
+    }
+
+    var attachedCustomBalloonDesign: NSImage? {
+        image(from: customBalloonDesignDataURL)
     }
 
     var explanationImages: [NSImage] {
