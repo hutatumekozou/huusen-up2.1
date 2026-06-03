@@ -2498,6 +2498,10 @@ final class WebAdminServer {
               return previewBalloon?.classList.contains("large") ? 2 : 1;
             }
 
+            function selectedSizeName() {
+              return document.querySelector('input[name="sizeName"]:checked')?.value || "";
+            }
+
             function sizedFont(input, fallback) {
               const value = Number(input?.value || 0);
               const scale = currentScale();
@@ -2616,7 +2620,29 @@ final class WebAdminServer {
 
             function applyInitialImageLayout() {
               setPosition("imageCaptionOffsetX", "imageCaptionOffsetY", 0, 0);
+              if (selectedSizeName() === "特大") {
+                applySizePreset("特大");
+                return;
+              }
               setPosition("textOffsetX", "textOffsetY", 0, -0.18);
+            }
+
+            function applySizePreset(sizeName) {
+              if (sizeName !== "特大") return;
+              if (textFontSizeInput) textFontSizeInput.value = "16";
+              setPosition("textOffsetX", "textOffsetY", 0, -0.03);
+            }
+
+            function applySizeSelection(input) {
+              if (!input?.checked) return;
+              previewBalloon?.classList.toggle("large", input.value === "ラージ");
+              previewBalloon?.classList.toggle("extra-large", input.value === "特大");
+              previewArea?.classList.toggle("extra-large-preview", input.value === "特大");
+              applySizePreset(input.value);
+              if (previewSizeMeta) previewSizeMeta.textContent = `サイズ: ${input.value}`;
+              applyPreviewFontSizes();
+              applyPreviewImageScale();
+              applyPreviewTextPositions();
             }
 
             function applyPreviewColor(input) {
@@ -3329,16 +3355,8 @@ final class WebAdminServer {
             });
 
             sizeInputs.forEach((input) => {
-              input.addEventListener("change", () => {
-                if (!input.checked) return;
-                previewBalloon?.classList.toggle("large", input.value === "ラージ");
-                previewBalloon?.classList.toggle("extra-large", input.value === "特大");
-                previewArea?.classList.toggle("extra-large-preview", input.value === "特大");
-                if (previewSizeMeta) previewSizeMeta.textContent = `サイズ: ${input.value}`;
-                applyPreviewFontSizes();
-                applyPreviewImageScale();
-                applyPreviewTextPositions();
-              });
+              input.addEventListener("change", () => applySizeSelection(input));
+              input.addEventListener("click", () => applySizeSelection(input));
             });
 
             colorInputs.forEach((input) => {
