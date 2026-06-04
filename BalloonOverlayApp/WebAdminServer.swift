@@ -99,8 +99,13 @@ final class WebAdminServer {
     }
 
     private func receiveRequestData(from connection: NWConnection, buffer: Data) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 24_000_000) { [weak self] data, _, _, _ in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 24_000_000) { [weak self] data, _, isComplete, error in
             guard let self else {
+                connection.cancel()
+                return
+            }
+
+            if error != nil {
                 connection.cancel()
                 return
             }
@@ -108,6 +113,16 @@ final class WebAdminServer {
             var nextBuffer = buffer
             if let data {
                 nextBuffer.append(data)
+            }
+
+            guard !nextBuffer.isEmpty else {
+                connection.cancel()
+                return
+            }
+
+            if isComplete && !self.isCompleteRequest(nextBuffer) {
+                connection.cancel()
+                return
             }
 
             guard self.isCompleteRequest(nextBuffer) else {
@@ -148,6 +163,12 @@ final class WebAdminServer {
     }
 
     private func response(for request: String) -> Data {
+        guard Thread.isMainThread else {
+            return DispatchQueue.main.sync {
+                self.response(for: request)
+            }
+        }
+
         let path = requestPath(from: request)
 
         switch path.path {
@@ -794,7 +815,6 @@ final class WebAdminServer {
         let imageDataURL = formBalloon.imageDataURL ?? ""
         let backImageName = formBalloon.backImageName ?? ""
         let backImageDataURL = formBalloon.backImageDataURL ?? ""
-        let previewSizeClass = previewSizeClass(for: formBalloon.sizeName)
         let previewContent = renderPreviewContent(imageDataURL: imageDataURL, imageName: imageName, text: frontTextInputValue(for: formBalloon))
         let selectedTab = editingBalloon != nil ? "create" : (tab == "list" ? "list" : "create")
         let status = settings.isPaused ? "一時停止中" : "稼働中"
@@ -829,7 +849,6 @@ final class WebAdminServer {
                 imageDataURL: imageDataURL,
                 backImageName: backImageName,
                 backImageDataURL: backImageDataURL,
-                previewSizeClass: previewSizeClass,
                 previewContent: previewContent,
                 colorOptions: colorOptions,
                 positionOptions: positionOptions,
@@ -947,21 +966,13 @@ final class WebAdminServer {
               margin-bottom: 18px;
             }
             .preview {
-              display: grid;
-              grid-template-columns: 320px minmax(0, 1fr);
-              gap: 18px;
-              align-items: center;
-              margin-bottom: 22px;
-            }
-            .preview.extra-large-preview {
-              grid-template-columns: 1fr;
+              width: 320px;
+              max-width: 100%;
+              display: inline-grid;
+              gap: 8px;
               justify-items: center;
               align-items: start;
-            }
-            .preview.extra-large-preview > div:last-child {
-              width: min(100%, 520px);
-              justify-self: center;
-              text-align: center;
+              margin-bottom: 22px;
             }
             .preview-balloon {
               --preview-size: 96px;
@@ -1449,15 +1460,14 @@ final class WebAdminServer {
               border-top-width: 30px;
               margin-top: -6px;
             }
-            .preview-title {
-              font-size: 17px;
-              font-weight: 700;
-              margin: 0 0 8px;
+            .preview-controls {
+              display: flex;
+              justify-content: center;
             }
             .preview-side-toggle {
               display: inline-flex;
               gap: 8px;
-              margin: 0 0 10px;
+              margin: 0;
             }
             .preview-side-button {
               min-height: 34px;
@@ -2253,7 +2263,6 @@ final class WebAdminServer {
             }));
             const previewBody = document.querySelector("#previewBody");
             const previewBalloon = document.querySelector("#previewBalloon");
-            const previewArea = document.querySelector("#previewArea");
             const previewSideButtons = document.querySelectorAll("[data-preview-side]");
             const sizeInputs = document.querySelectorAll('input[name="sizeName"]');
             const colorInputs = document.querySelectorAll('input[name="colorName"]');
@@ -2494,8 +2503,7 @@ final class WebAdminServer {
             });
 
             function currentScale() {
-              if (previewBalloon?.classList.contains("extra-large")) return 3;
-              return previewBalloon?.classList.contains("large") ? 2 : 1;
+              return 2;
             }
 
             function selectedSizeName() {
@@ -2620,24 +2628,16 @@ final class WebAdminServer {
 
             function applyInitialImageLayout() {
               setPosition("imageCaptionOffsetX", "imageCaptionOffsetY", 0, 0);
-              if (selectedSizeName() === "特大") {
-                applySizePreset("特大");
-                return;
-              }
-              setPosition("textOffsetX", "textOffsetY", 0, -0.18);
+              applySizePreset(selectedSizeName());
             }
 
             function applySizePreset(sizeName) {
-              if (sizeName !== "特大") return;
               if (textFontSizeInput) textFontSizeInput.value = "16";
               setPosition("textOffsetX", "textOffsetY", 0, -0.03);
             }
 
             function applySizeSelection(input) {
               if (!input?.checked) return;
-              previewBalloon?.classList.toggle("large", input.value === "ラージ");
-              previewBalloon?.classList.toggle("extra-large", input.value === "特大");
-              previewArea?.classList.toggle("extra-large-preview", input.value === "特大");
               applySizePreset(input.value);
               if (previewSizeMeta) previewSizeMeta.textContent = `サイズ: ${input.value}`;
               applyPreviewFontSizes();
@@ -2887,10 +2887,10 @@ final class WebAdminServer {
               resetField(form, '[name="text"]', "");
               resetField(form, '[name="backText"]', "");
               resetField(form, 'textarea[name="explanationText"]', "");
-              resetField(form, 'input[name="textFontSize"]', "0");
+              resetField(form, 'input[name="textFontSize"]', "16");
               resetField(form, 'input[name="imageScale"]', "1.0");
               resetField(form, 'input[name="textOffsetX"]', "0.00");
-              resetField(form, 'input[name="textOffsetY"]', "0.00");
+              resetField(form, 'input[name="textOffsetY"]', "-0.03");
               resetField(form, 'input[name="imageCaptionOffsetX"]', "0.00");
               resetField(form, 'input[name="imageCaptionOffsetY"]', "0.00");
               resetField(form, 'input[name="intervalMinutes"]', "1.0");
@@ -2950,7 +2950,6 @@ final class WebAdminServer {
               });
               previewBalloon?.classList.add("large");
               previewBalloon?.classList.remove("extra-large");
-              previewArea?.classList.remove("extra-large-preview");
               setPreviewSide("front");
               if (previewTitleMeta) previewTitleMeta.textContent = "表面: ";
               if (previewBackMeta) previewBackMeta.textContent = "裏面: なし";
@@ -3746,7 +3745,6 @@ final class WebAdminServer {
         imageDataURL: String,
         backImageName: String,
         backImageDataURL: String,
-        previewSizeClass: String,
         previewContent: String,
         colorOptions: String,
         positionOptions: String,
@@ -3768,10 +3766,10 @@ final class WebAdminServer {
         let titleValue = editingID == nil ? "" : activeBalloon.title.htmlEscaped
         let textValue = editingID == nil ? "" : frontTextInputValue(for: activeBalloon).htmlEscaped
         let backTextValue = editingID == nil ? "" : backTextInputValue(for: activeBalloon).htmlEscaped
-        let textFontSize = formatFontSize(activeBalloon.textFontSize)
+        let textFontSize = editingID == nil ? "16" : formatFontSize(activeBalloon.textFontSize)
         let imageScale = formatImageScale(activeBalloon.imageScale)
         let textOffsetX = formatPositionOffset(activeBalloon.textOffsetX)
-        let textOffsetY = formatPositionOffset(activeBalloon.textOffsetY)
+        let textOffsetY = editingID == nil ? "-0.03" : formatPositionOffset(activeBalloon.textOffsetY)
         let imageCaptionOffsetX = formatPositionOffset(activeBalloon.imageCaptionOffsetX)
         let imageCaptionOffsetY = formatPositionOffset(activeBalloon.imageCaptionOffsetY)
         let resetLink = editingID == nil ? "" : "<a class=\"button\" href=\"/?tab=create\">新規作成に戻す</a>"
@@ -3802,7 +3800,6 @@ final class WebAdminServer {
         let hasBackImage = backImageDataURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
         let backImageAttachmentClass = hasBackImage ? " attached" : ""
         let backImageStatus = hasBackImage ? "添付済み" : "未添付"
-        let previewLayoutClass = previewSizeClass.contains("extra-large") ? " extra-large-preview" : ""
         let categoryEditPanel = renderCategoryEditPanel(
             editGenreName: editGenreName,
             editMiddleCategoryGenreName: editMiddleCategoryGenreName,
@@ -3855,15 +3852,14 @@ final class WebAdminServer {
               タイトル
               <input name="title" value="\(titleValue)" placeholder="例: 商品名 / 問題名 / メモの名前">
             </label>
-            <div class="preview\(previewLayoutClass)" id="previewArea">
-              <div class="preview-balloon\(previewSizeClass)" id="previewBalloon">
+            <div class="preview" id="previewArea">
+              <div class="preview-balloon large" id="previewBalloon">
                 \(previewBadges)
                 <div class="\(previewBodyClass)" id="previewBody"\(previewBodyStyle)>\(previewContent)</div>
                 <div class="preview-knot"></div>
                 \(previewItemNumber)
               </div>
-              <div>
-                <p class="preview-title">登録中の風船</p>
+              <div class="preview-controls">
                 <div class="preview-side-toggle" aria-label="プレビュー面の切り替え">
                   <button class="button preview-side-button active" type="button" data-preview-side="front">表</button>
                   <button class="button preview-side-button" type="button" data-preview-side="back">裏</button>
@@ -4715,17 +4711,6 @@ final class WebAdminServer {
 
     private func formatPositionOffset(_ value: Double) -> String {
         String(format: "%.2f", min(max(value, -0.45), 0.45))
-    }
-
-    private func previewSizeClass(for sizeName: String) -> String {
-        switch sizeName {
-        case "ラージ":
-            return " large"
-        case "特大":
-            return " extra-large"
-        default:
-            return ""
-        }
     }
 
     private func previewScale(for sizeName: String) -> Double {
