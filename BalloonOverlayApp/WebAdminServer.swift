@@ -962,6 +962,13 @@ final class WebAdminServer {
               grid-template-columns: repeat(3, minmax(0, 1fr));
               gap: 16px;
             }
+            .color-size-row {
+              grid-column: 1 / -1;
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) minmax(230px, 0.65fr);
+              gap: 16px;
+              align-items: start;
+            }
             .top-field {
               margin-bottom: 18px;
             }
@@ -1263,6 +1270,16 @@ final class WebAdminServer {
               border: 1px solid #d9dde5;
               border-radius: 8px;
               background: #e9ecef;
+            }
+            .category-add-block {
+              border-color: #b8bec8;
+              background: #cbd1da;
+              font-weight: 800;
+            }
+            .category-add-block input,
+            .category-add-block select,
+            .category-add-block button {
+              font-weight: 400;
             }
             .genre-add-row {
               display: grid;
@@ -2155,9 +2172,10 @@ final class WebAdminServer {
               margin: 0 0 16px;
             }
             .header-position-form {
-              min-width: 430px;
+              flex: 1;
+              max-width: 620px;
               display: grid;
-              grid-template-columns: minmax(135px, 0.8fr) minmax(160px, 1fr) auto;
+              grid-template-columns: minmax(110px, 0.65fr) minmax(125px, 0.75fr) minmax(150px, 1fr) auto;
               gap: 8px;
               align-items: end;
               margin: 0;
@@ -2180,6 +2198,7 @@ final class WebAdminServer {
             @media (max-width: 620px) {
               header, .grid, .preview, .item, .panel-heading { display: block; }
               .heading-actions { justify-content: flex-start; margin: 12px 0 0; }
+              .color-size-row { grid-template-columns: 1fr; }
               .position-controls { grid-template-columns: 1fr; }
               .explanation-image-grid { grid-template-columns: 1fr; }
               label { margin-bottom: 14px; }
@@ -2202,6 +2221,10 @@ final class WebAdminServer {
               </div>
               <form class="header-position-form" action="/set-launch-position" method="post">
                 <input type="hidden" name="tab" value="\(selectedTab.htmlEscaped)">
+                <label>
+                  一旦停止時間（秒）
+                  <input name="middlePauseDuration" form="balloonCreateForm" type="number" min="0" step="0.1" value="\(formatDuration(formBalloon.middlePauseDuration))">
+                </label>
                 <label>
                   上昇スピード（px/秒）
                   <input name="climbSpeed" type="number" min="40" max="900" step="10" value="\(climbSpeed)">
@@ -2898,6 +2921,8 @@ final class WebAdminServer {
               resetField(form, 'input[name="randomIntervalMinSeconds"]', "5");
               resetField(form, 'input[name="randomIntervalMaxSeconds"]', "600");
               resetField(form, 'input[name="middlePauseDuration"]', "15");
+              const headerPauseDurationInput = document.querySelector('input[name="middlePauseDuration"][form="balloonCreateForm"]');
+              if (headerPauseDurationInput) headerPauseDurationInput.value = "15";
               resetChecked(form, 'input[name="pausesAtMiddle"]', true);
 
               const defaultColor = form.querySelector('input[name="colorName"][value="レッド"]') || form.querySelector('input[name="colorName"]');
@@ -2908,7 +2933,7 @@ final class WebAdminServer {
               updateCustomBalloonDesignScale(1);
               updateCustomBalloonDesignThumbnail("");
               const defaultPosition = form.querySelector('input[name="positionName"][value="ランダム"]') || form.querySelector('input[name="positionName"]');
-              if (defaultPosition) defaultPosition.checked = true;
+              if (defaultPosition) defaultPosition.value = "ランダム";
               const defaultSize = form.querySelector('input[name="sizeName"][value="ラージ"]') || form.querySelector('input[name="sizeName"]');
               if (defaultSize) defaultSize.checked = true;
 
@@ -3825,7 +3850,7 @@ final class WebAdminServer {
 
         return """
         <section class="panel">
-          <form action="/save" method="post">
+          <form id="balloonCreateForm" action="/save" method="post">
             \(hiddenIDInput)
             \(returnToInput)
             \(returnScrollYInput)
@@ -3840,6 +3865,8 @@ final class WebAdminServer {
             <input id="imageCaptionOffsetXInput" type="hidden" name="imageCaptionOffsetX" value="\(imageCaptionOffsetX)">
             <input id="imageCaptionOffsetYInput" type="hidden" name="imageCaptionOffsetY" value="\(imageCaptionOffsetY)">
             <input type="hidden" name="intervalMinutes" value="\(intervalMinutes)">
+            <input type="hidden" name="positionName" value="\(activeBalloon.positionName.htmlEscaped)">
+            <input type="hidden" name="pausesAtMiddle" value="on">
             \(explanationImageInputs)
             <div class="panel-heading">
               <h2>\(panelTitle)</h2>
@@ -3867,16 +3894,37 @@ final class WebAdminServer {
               </div>
             </div>
             <div class="grid">
-              <label class="full">
-                風船カラー
-                <div class="swatches">
-                  \(colorOptions)
-                </div>
-              </label>
+              <div class="color-size-row">
+                <label>
+                  風船カラー
+                  <div class="swatches">
+                    \(colorOptions)
+                  </div>
+                </label>
+                <label>
+                  風船サイズ
+                  <div class="segmented three">
+                    \(sizeOptions)
+                  </div>
+                </label>
+              </div>
               <label class="front-entry">
                 表に入れる文字
                 <textarea class="compact" name="text" placeholder="例: しばし待たれよ / 水を飲む / これいくらで売れた?">\(textValue)</textarea>
               </label>
+              <div id="imageAttachmentItem" class="file-row front-entry attachment-image-item\(frontImageAttachmentClass)">
+                <span class="attachment-image-title">
+                  表に入れる画像ファイル
+                  <span class="attachment-image-title-actions">
+                    <button id="imageCheckButton" class="button image-check-button" type="button" \(hasFrontImage ? "" : "disabled")>画像確認</button>
+                    <small id="imageStatus">\(frontImageStatus)</small>
+                  </span>
+                </span>
+                <span class="file-control-row">
+                  <input id="imageFileInput" type="file" accept="image/*">
+                  <button id="removeImageDataInput" class="button danger image-remove-button" type="button" data-remove-attachment \(hasFrontImage ? "" : "disabled")>表面の添付画像を削除</button>
+                </span>
+              </div>
               <div class="front-entry font-controls">
                 <div class="font-control">
                   <input name="textFontSize" type="hidden" value="\(textFontSize)">
@@ -3906,23 +3954,23 @@ final class WebAdminServer {
                 \(renderPositionControl(title: "表文字位置", xName: "textOffsetX", yName: "textOffsetY"))
                 \(renderPositionControl(title: "画像位置", xName: "imageCaptionOffsetX", yName: "imageCaptionOffsetY"))
               </div>
-              <div id="imageAttachmentItem" class="file-row front-entry attachment-image-item\(frontImageAttachmentClass)">
-                <span class="attachment-image-title">
-                  表に入れる画像ファイル
-                  <span class="attachment-image-title-actions">
-                    <button id="imageCheckButton" class="button image-check-button" type="button" \(hasFrontImage ? "" : "disabled")>画像確認</button>
-                    <small id="imageStatus">\(frontImageStatus)</small>
-                  </span>
-                </span>
-                <span class="file-control-row">
-                  <input id="imageFileInput" type="file" accept="image/*">
-                  <button id="removeImageDataInput" class="button danger image-remove-button" type="button" data-remove-attachment \(hasFrontImage ? "" : "disabled")>表面の添付画像を削除</button>
-                </span>
-              </div>
               <label class="back-entry">
                 裏に入れる文字
                 <textarea class="compact" name="backText" placeholder="例: 答え / 解説の要点 / 裏面メモ">\(backTextValue)</textarea>
               </label>
+              <div id="backImageAttachmentItem" class="file-row back-entry attachment-image-item\(backImageAttachmentClass)">
+                <span class="attachment-image-title">
+                  裏に入れる画像ファイル
+                  <span class="attachment-image-title-actions">
+                    <button id="backImageCheckButton" class="button image-check-button" type="button" \(hasBackImage ? "" : "disabled")>画像確認</button>
+                    <small id="backImageStatus">\(backImageStatus)</small>
+                  </span>
+                </span>
+                <span class="file-control-row">
+                  <input id="backImageFileInput" type="file" accept="image/*">
+                  <button id="removeBackImageDataInput" class="button danger image-remove-button" type="button" data-remove-attachment \(hasBackImage ? "" : "disabled")>裏面の添付画像を削除</button>
+                </span>
+              </div>
               <div class="back-entry font-controls">
                 <div class="font-control">
                   <div class="font-control-head">
@@ -3950,19 +3998,6 @@ final class WebAdminServer {
               <div class="back-entry position-controls">
                 \(renderPositionControl(title: "裏文字位置", xName: "textOffsetX", yName: "textOffsetY"))
                 \(renderPositionControl(title: "裏画像位置", xName: "imageCaptionOffsetX", yName: "imageCaptionOffsetY"))
-              </div>
-              <div id="backImageAttachmentItem" class="file-row back-entry attachment-image-item\(backImageAttachmentClass)">
-                <span class="attachment-image-title">
-                  裏に入れる画像ファイル
-                  <span class="attachment-image-title-actions">
-                    <button id="backImageCheckButton" class="button image-check-button" type="button" \(hasBackImage ? "" : "disabled")>画像確認</button>
-                    <small id="backImageStatus">\(backImageStatus)</small>
-                  </span>
-                </span>
-                <span class="file-control-row">
-                  <input id="backImageFileInput" type="file" accept="image/*">
-                  <button id="removeBackImageDataInput" class="button danger image-remove-button" type="button" data-remove-attachment \(hasBackImage ? "" : "disabled")>裏面の添付画像を削除</button>
-                </span>
               </div>
               <label class="full explanation-entry">
                 解説に入れる内容
@@ -3994,7 +4029,7 @@ final class WebAdminServer {
                     \(smallCategoryOptions)
                   </select>
                 </span>
-                <span class="category-action-block">
+                <span class="category-action-block category-add-block">
                   大カテゴリを追加する
                   <span class="genre-add-row">
                     <input name="newGenreName" value="" placeholder="例: 税金 / 電脳 / アパレル物販">
@@ -4011,7 +4046,7 @@ final class WebAdminServer {
                     <button type="submit" formmethod="post" formaction="/delete-genre" onclick="return confirm('本当に削除しますか？');">削除</button>
                   </span>
                 </span>
-                <span class="category-action-block">
+                <span class="category-action-block category-add-block">
                   中カテゴリを紐づける大カテゴリを選んで追加する
                   <span class="middle-category-add-row">
                     <select name="middleCategoryGenreName">
@@ -4034,7 +4069,7 @@ final class WebAdminServer {
                     <button type="submit" formmethod="post" formaction="/delete-middle-category" onclick="return confirm('本当に削除しますか？');">削除</button>
                   </span>
                 </span>
-                <span class="category-action-block">
+                <span class="category-action-block category-add-block">
                   小カテゴリを紐づける大カテゴリ・中カテゴリを選んで追加する
                   <span class="small-category-add-row">
                     <select name="smallCategoryGenreName">
@@ -4064,43 +4099,6 @@ final class WebAdminServer {
                   </span>
                 </span>
                 <span id="categoryEditPanelMount">\(categoryEditPanel)</span>
-              </label>
-              <label class="full">
-                風船が這い上がる場所
-                <div class="segmented">
-                  \(positionOptions)
-                </div>
-              </label>
-              <div class="triple-row">
-                <label>
-                  ランダム時の最小秒
-                  <input name="randomIntervalMinSeconds" type="number" min="1" step="1" value="\(randomIntervalMinSeconds)">
-                </label>
-                <label>
-                  ランダム時の最大秒
-                  <input name="randomIntervalMaxSeconds" type="number" min="1" step="1" value="\(randomIntervalMaxSeconds)">
-                </label>
-                <label>
-                  上昇スピード（px/秒）
-                  <input name="climbSpeed" type="number" min="40" max="900" step="10" value="\(climbSpeed)">
-                </label>
-              </div>
-              <label class="full">
-                風船サイズ
-                <div class="segmented three">
-                  \(sizeOptions)
-                </div>
-              </label>
-              <label>
-                高さ中央で一旦停止
-                <span class="checkline">
-                  <input name="pausesAtMiddle" type="checkbox" \(activeBalloon.pausesAtMiddle ? "checked" : "")>
-                  停止する
-                </span>
-              </label>
-              <label>
-                停止時間（秒）
-                <input name="middlePauseDuration" type="number" min="0.1" max="30" step="0.1" value="\(formatDuration(activeBalloon.middlePauseDuration))">
               </label>
             </div>
             <div class="actions">
