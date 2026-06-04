@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVFoundation
 
 private enum AnswerControlFrame: Hashable {
     case correctStamp
@@ -68,6 +69,7 @@ struct BalloonOverlayView: View {
     @State private var lastTickDate: Date?
     @State private var middlePauseRemaining: Double?
     @State private var hasReachedMiddle = false
+    @State private var didSpeakAtMiddle = false
     @State private var isShowingBack = false
     @State private var motionEndY = 0.0
     @State private var motionMiddleY = 0.0
@@ -82,6 +84,7 @@ struct BalloonOverlayView: View {
     @State private var answerRevision = 0
     @State private var answerFeedback: String?
     @State private var editingAnswerCount: Bool?
+    @State private var speechSynthesizer = AVSpeechSynthesizer()
 
     var body: some View {
         GeometryReader { proxy in
@@ -133,10 +136,12 @@ struct BalloonOverlayView: View {
                 motionCenterX = centerX
                 motionBalloonSize = balloonSize
                 motionContainerSize = proxy.size
+                didSpeakAtMiddle = false
                 if startsVisible {
                     hasReachedMiddle = true
                     isPausedAtMiddle = true
                     middlePauseRemaining = pauseRemaining(for: balloon)
+                    speakAtMiddleIfNeeded(for: balloon)
                 }
                 updateInteractionFrames(centerX: centerX, centerY: initialY, size: balloonSize, containerSize: proxy.size)
                 isShowingBack = false
@@ -193,6 +198,7 @@ struct BalloonOverlayView: View {
                 reviewUpdateFrame = frames[.reviewUpdate] ?? .zero
             }
             .onDisappear {
+                speechSynthesizer.stopSpeaking(at: .immediate)
                 stopMotionTimer()
                 removeClickObserver()
                 OverlayInteractionRegistry.shared.remove(screenFrame: screenFrame)
@@ -212,6 +218,18 @@ struct BalloonOverlayView: View {
         motionTimer?.invalidate()
         motionTimer = nil
         lastTickDate = nil
+    }
+
+    private func speakAtMiddleIfNeeded(for balloon: BalloonProfile) {
+        let speechText = balloon.speechText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !didSpeakAtMiddle, !speechText.isEmpty else { return }
+
+        didSpeakAtMiddle = true
+        speechSynthesizer.stopSpeaking(at: .immediate)
+        let utterance = AVSpeechUtterance(string: speechText)
+        utterance.voice = AVSpeechSynthesisVoice(language: "ja-JP")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        speechSynthesizer.speak(utterance)
     }
 
     private func tickMotion() {
@@ -242,6 +260,7 @@ struct BalloonOverlayView: View {
             hasReachedMiddle = true
             isPausedAtMiddle = true
             middlePauseRemaining = pauseRemaining(for: balloon)
+            speakAtMiddleIfNeeded(for: balloon)
             return
         }
 

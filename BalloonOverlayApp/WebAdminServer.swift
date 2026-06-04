@@ -478,6 +478,7 @@ final class WebAdminServer {
                         id: id,
                         title: title,
                         text: frontText,
+                        speechText: query["speechText"] ?? "",
                         explanationText: query["explanationText"] ?? "",
                         explanationImageDataURLs: explanationImageDataURLs,
                         imageName: nil,
@@ -507,6 +508,7 @@ final class WebAdminServer {
                     self.settings.addBalloon(
                         title: title,
                         text: frontText,
+                        speechText: query["speechText"] ?? "",
                         explanationText: query["explanationText"] ?? "",
                         explanationImageDataURLs: explanationImageDataURLs,
                         imageName: nil,
@@ -618,6 +620,7 @@ final class WebAdminServer {
             } ?? 0,
             title: title,
             text: text.isEmpty && !hasFrontImage ? "🎈" : text,
+            speechText: query["speechText"] ?? "",
             explanationText: query["explanationText"] ?? "",
             explanationImageDataURLs: explanationImageDataURLs,
             imageName: nil,
@@ -1508,6 +1511,7 @@ final class WebAdminServer {
             }
             .front-entry,
             .back-entry,
+            .speech-entry,
             .explanation-entry {
               padding: 12px;
               border-radius: 8px;
@@ -1518,6 +1522,22 @@ final class WebAdminServer {
             }
             .back-entry {
               background: #eef8ff;
+            }
+            .speech-entry {
+              background: #fff7df;
+            }
+            .speech-entry-head {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 10px;
+            }
+            .speech-test-button {
+              min-height: 32px;
+              padding: 0 12px;
+              white-space: nowrap;
+              font-size: 13px;
+              font-weight: 700;
             }
             .explanation-entry {
               background: #f0fff4;
@@ -2326,6 +2346,7 @@ final class WebAdminServer {
             const categoryEditPanelMount = document.querySelector("#categoryEditPanelMount");
             const resetCreateFormButton = document.querySelector("#resetCreateFormButton");
             const testBalloonButton = document.querySelector("#testBalloonButton");
+            const testSpeechButton = document.querySelector("#testSpeechButton");
             const previewTitleMeta = document.querySelector("#previewTitleMeta");
             const previewBackMeta = document.querySelector("#previewBackMeta");
             const previewGenreMeta = document.querySelector("#previewGenreMeta");
@@ -2336,6 +2357,7 @@ final class WebAdminServer {
             const previewBackBadge = document.querySelector("#previewBackBadge");
             const textInput = document.querySelector('[name="text"]');
             const backTextInput = document.querySelector('[name="backText"]');
+            const speechTextInput = document.querySelector('[name="speechText"]');
             const textFontSizeInput = document.querySelector('input[name="textFontSize"]');
             const imageScaleInput = document.querySelector('input[name="imageScale"]');
             const textOffsetXInput = document.querySelector('input[name="textOffsetX"]');
@@ -2523,6 +2545,24 @@ final class WebAdminServer {
                 testBalloonButton.disabled = false;
                 testBalloonButton.textContent = originalText;
               }
+            });
+
+            testSpeechButton?.addEventListener("click", () => {
+              const text = speechTextInput?.value.trim() || "";
+              if (!text) {
+                window.alert("音声出力枠にテストしたい文字を入力してください。");
+                return;
+              }
+              if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+                window.alert("このブラウザでは音声テストに対応していません。");
+                return;
+              }
+
+              window.speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance(text);
+              utterance.lang = "ja-JP";
+              utterance.rate = 1;
+              window.speechSynthesis.speak(utterance);
             });
 
             function currentScale() {
@@ -2909,6 +2949,7 @@ final class WebAdminServer {
               resetField(form, 'input[name="title"]', "");
               resetField(form, '[name="text"]', "");
               resetField(form, '[name="backText"]', "");
+              resetField(form, 'textarea[name="speechText"]', "");
               resetField(form, 'textarea[name="explanationText"]', "");
               resetField(form, 'input[name="textFontSize"]', "16");
               resetField(form, 'input[name="imageScale"]', "1.0");
@@ -3790,6 +3831,7 @@ final class WebAdminServer {
         let panelTitle = editingID == nil ? "風船作成" : "風船編集"
         let titleValue = editingID == nil ? "" : activeBalloon.title.htmlEscaped
         let textValue = editingID == nil ? "" : frontTextInputValue(for: activeBalloon).htmlEscaped
+        let speechTextValue = editingID == nil ? "" : activeBalloon.speechText.htmlEscaped
         let backTextValue = editingID == nil ? "" : backTextInputValue(for: activeBalloon).htmlEscaped
         let textFontSize = editingID == nil ? "16" : formatFontSize(activeBalloon.textFontSize)
         let imageScale = formatImageScale(activeBalloon.imageScale)
@@ -3999,6 +4041,13 @@ final class WebAdminServer {
                 \(renderPositionControl(title: "裏文字位置", xName: "textOffsetX", yName: "textOffsetY"))
                 \(renderPositionControl(title: "裏画像位置", xName: "imageCaptionOffsetX", yName: "imageCaptionOffsetY"))
               </div>
+              <label class="full speech-entry">
+                <span class="speech-entry-head">
+                  音声出力枠
+                  <button id="testSpeechButton" class="button speech-test-button" type="button">読み上げテスト</button>
+                </span>
+                <textarea class="compact" name="speechText" placeholder="風船が途中で停止した時に自動で読み上げる内容">\(speechTextValue)</textarea>
+              </label>
               <label class="full explanation-entry">
                 解説に入れる内容
                 <textarea name="explanationText" placeholder="解説ボタンを押した時に表示する内容">\(activeBalloon.explanationText.htmlEscaped)</textarea>

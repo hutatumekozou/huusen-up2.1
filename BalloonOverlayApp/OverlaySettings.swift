@@ -5,6 +5,7 @@ struct BalloonProfile: Codable, Identifiable {
     var itemNumber: Int
     var title: String
     var text: String
+    var speechText: String
     var explanationText: String
     var explanationImageDataURLs: [String]
     var imageName: String?
@@ -43,6 +44,7 @@ struct BalloonProfile: Codable, Identifiable {
         itemNumber: Int,
         title: String,
         text: String,
+        speechText: String,
         explanationText: String,
         explanationImageDataURLs: [String],
         imageName: String?,
@@ -80,6 +82,7 @@ struct BalloonProfile: Codable, Identifiable {
         self.itemNumber = itemNumber
         self.title = title
         self.text = text
+        self.speechText = speechText
         self.explanationText = explanationText
         self.explanationImageDataURLs = explanationImageDataURLs
         self.imageName = imageName
@@ -120,6 +123,7 @@ struct BalloonProfile: Codable, Identifiable {
         itemNumber = try container.decodeIfPresent(Int.self, forKey: .itemNumber) ?? 0
         title = try container.decode(String.self, forKey: .title)
         text = try container.decode(String.self, forKey: .text)
+        speechText = try container.decodeIfPresent(String.self, forKey: .speechText) ?? ""
         explanationText = try container.decodeIfPresent(String.self, forKey: .explanationText) ?? ""
         explanationImageDataURLs = try container.decodeIfPresent([String].self, forKey: .explanationImageDataURLs) ?? []
         imageName = try container.decodeIfPresent(String.self, forKey: .imageName)
@@ -346,6 +350,7 @@ final class OverlaySettings {
             itemNumber: 0,
             title: trimmedTitle,
             text: trimmedMessage,
+            speechText: "",
             explanationText: trimmedDetails,
             explanationImageDataURLs: [],
             imageName: nil,
@@ -392,6 +397,7 @@ final class OverlaySettings {
     func addBalloon(
         title: String,
         text: String,
+        speechText: String,
         explanationText: String,
         explanationImageDataURLs: [String],
         imageName: String?,
@@ -422,6 +428,7 @@ final class OverlaySettings {
         let size = Self.sizeOptions.first(where: { $0.name == sizeName }) ?? Self.sizeOptions[0]
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSpeechText = speechText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedExplanationText = explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedExplanationImageDataURLs = Self.cleanedExplanationImageDataURLs(explanationImageDataURLs)
         let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -451,6 +458,7 @@ final class OverlaySettings {
             itemNumber: nextItemNumber(),
             title: trimmedTitle.isEmpty ? "無題の風船" : trimmedTitle,
             text: trimmedText.isEmpty && trimmedImageName == nil && trimmedImageDataURL == nil ? "🎈" : trimmedText,
+            speechText: trimmedSpeechText,
             explanationText: trimmedExplanationText,
             explanationImageDataURLs: trimmedExplanationImageDataURLs,
             imageName: trimmedImageName,
@@ -494,6 +502,7 @@ final class OverlaySettings {
         id: UUID,
         title: String,
         text: String,
+        speechText: String,
         explanationText: String,
         explanationImageDataURLs: [String],
         imageName: String?,
@@ -526,6 +535,7 @@ final class OverlaySettings {
         let size = Self.sizeOptions.first(where: { $0.name == sizeName }) ?? Self.sizeOptions[0]
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSpeechText = speechText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedExplanationText = explanationText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedExplanationImageDataURLs = Self.cleanedExplanationImageDataURLs(explanationImageDataURLs)
         let trimmedBackText = backText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -562,6 +572,7 @@ final class OverlaySettings {
             itemNumber: itemNumber,
             title: trimmedTitle.isEmpty ? "無題の風船" : trimmedTitle,
             text: trimmedText.isEmpty && trimmedImageName == nil && trimmedImageDataURL == nil ? "🎈" : trimmedText,
+            speechText: trimmedSpeechText,
             explanationText: trimmedExplanationText,
             explanationImageDataURLs: trimmedExplanationImageDataURLs,
             imageName: trimmedImageName,
@@ -1025,6 +1036,7 @@ final class OverlaySettings {
             itemNumber: nextItemNumber(),
             title: "最初の風船",
             text: text,
+            speechText: "",
             explanationText: "",
             explanationImageDataURLs: [],
             imageName: imageName?.nilIfEmpty,
@@ -1115,6 +1127,7 @@ final class OverlaySettings {
             itemNumber: 0,
             title: "風船",
             text: "🎈",
+            speechText: "",
             explanationText: "",
             explanationImageDataURLs: [],
             imageName: nil,
