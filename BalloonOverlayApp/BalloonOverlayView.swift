@@ -221,6 +221,8 @@ struct BalloonOverlayView: View {
     }
 
     private func speakAtMiddleIfNeeded(for balloon: BalloonProfile) {
+        guard settings.isSpeechOutputEnabled else { return }
+
         let speechText = balloon.speechText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !didSpeakAtMiddle, !speechText.isEmpty else { return }
 
@@ -228,7 +230,7 @@ struct BalloonOverlayView: View {
         speechSynthesizer.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: speechText)
         utterance.voice = AVSpeechSynthesisVoice(language: "ja-JP")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.9
         speechSynthesizer.speak(utterance)
     }
 
@@ -1383,6 +1385,12 @@ struct BalloonOverlayView: View {
         let imageName = isShowingBack ? balloon.backImageName : balloon.imageName
         let attachedImage = isShowingBack ? balloon.attachedBackImage : balloon.attachedImage
         let imageCaption = isShowingBack ? balloon.backImageCaptionText : balloon.frontImageCaptionText
+        let textFontSize = isShowingBack ? balloon.backTextFontSize : balloon.textFontSize
+        let imageScale = min(max(isShowingBack ? balloon.backImageScale : balloon.imageScale, 0.6), 2.0)
+        let textOffsetX = isShowingBack ? balloon.backTextOffsetX : balloon.textOffsetX
+        let textOffsetY = isShowingBack ? balloon.backTextOffsetY : balloon.textOffsetY
+        let imageOffsetX = isShowingBack ? balloon.backImageCaptionOffsetX : balloon.imageCaptionOffsetX
+        let imageOffsetY = isShowingBack ? balloon.backImageCaptionOffsetY : balloon.imageCaptionOffsetY
 
         if let image = attachedImage {
             let hasBackBadge = balloon.hasBackSide
@@ -1393,7 +1401,6 @@ struct BalloonOverlayView: View {
             let topInsetRatio = hasBackBadge ? 0.16 : 0.02
             let topInset = contentSize * topInsetRatio
             let baseImageHeightRatio = imageCaption == nil ? 0.82 : (captionLineCount > 2 ? 0.48 : (hasBackBadge ? 0.54 : 0.62))
-            let imageScale = min(max(balloon.imageScale, 0.6), 2.0)
             let imageWidthRatio = 0.82 * imageScale
             let imageHeightRatio = min(1.64, baseImageHeightRatio * imageScale)
             ZStack(alignment: .top) {
@@ -1406,12 +1413,12 @@ struct BalloonOverlayView: View {
                         maxHeight: contentSize * imageHeightRatio
                     )
                     .frame(width: contentSize, height: contentSize, alignment: .center)
-                    .offset(x: balloon.imageCaptionOffsetX * contentSize, y: balloon.imageCaptionOffsetY * contentSize)
+                    .offset(x: imageOffsetX * contentSize, y: imageOffsetY * contentSize)
                     .zIndex(1)
 
                 if let imageCaption {
                     Text(imageCaption)
-                        .font(.system(size: imageCaptionSize(for: imageCaption, balloon: balloon, contentSize: contentSize, width: captionWidth, height: captionHeight, contentScale: contentScale), weight: .bold))
+                        .font(.system(size: imageCaptionSize(for: imageCaption, fontSize: textFontSize, contentSize: contentSize, width: captionWidth, height: captionHeight, contentScale: contentScale), weight: .bold))
                         .minimumScaleFactor(0.25)
                         .lineLimit(5)
                         .allowsTightening(true)
@@ -1419,7 +1426,7 @@ struct BalloonOverlayView: View {
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
                         .frame(width: captionWidth, height: captionHeight, alignment: .center)
-                        .offset(x: balloon.textOffsetX * contentSize, y: balloon.textOffsetY * contentSize)
+                        .offset(x: textOffsetX * contentSize, y: textOffsetY * contentSize)
                         .zIndex(10)
                 }
             }
@@ -1434,14 +1441,14 @@ struct BalloonOverlayView: View {
                 .padding(imagePadding(for: contentScale))
         } else {
             Text(text)
-                .font(.system(size: textSize(for: text, balloon: balloon, contentSize: contentSize, contentScale: contentScale), weight: .bold))
+                .font(.system(size: textSize(for: text, fontSize: textFontSize, contentSize: contentSize, contentScale: contentScale), weight: .bold))
                 .minimumScaleFactor(0.2)
                 .lineLimit(8)
                 .allowsTightening(true)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
                 .padding(12 * contentScale)
-                .offset(x: balloon.textOffsetX * contentSize, y: balloon.textOffsetY * contentSize)
+                .offset(x: textOffsetX * contentSize, y: textOffsetY * contentSize)
         }
     }
 
@@ -1449,9 +1456,9 @@ struct BalloonOverlayView: View {
         contentScale > 1 ? 0 : 4
     }
 
-    private func imageCaptionSize(for text: String, balloon: BalloonProfile, contentSize: Double, width: Double, height: Double, contentScale: Double) -> Double {
-        if balloon.textFontSize > 0 {
-            return min(max(balloon.textFontSize * contentScale * livePreviewScale(for: contentSize), 4), 140 * contentScale)
+    private func imageCaptionSize(for text: String, fontSize: Double, contentSize: Double, width: Double, height: Double, contentScale: Double) -> Double {
+        if fontSize > 0 {
+            return min(max(fontSize * contentScale * livePreviewScale(for: contentSize), 4), 140 * contentScale)
         }
 
         let maximumSize = min(24 * contentScale, height * 0.44)
@@ -1471,9 +1478,9 @@ struct BalloonOverlayView: View {
         return low
     }
 
-    private func textSize(for text: String, balloon: BalloonProfile, contentSize: Double, contentScale: Double) -> Double {
-        if balloon.textFontSize > 0 {
-            return min(max(balloon.textFontSize * contentScale * livePreviewScale(for: contentSize), 4), 140 * contentScale)
+    private func textSize(for text: String, fontSize: Double, contentSize: Double, contentScale: Double) -> Double {
+        if fontSize > 0 {
+            return min(max(fontSize * contentScale * livePreviewScale(for: contentSize), 4), 140 * contentScale)
         }
 
         let lineCountBudget = max(4, min(8, Int(ceil(Double(text.count) / 7.0))))

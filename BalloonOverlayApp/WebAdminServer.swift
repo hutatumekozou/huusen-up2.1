@@ -276,6 +276,38 @@ final class WebAdminServer {
                 }
             }
             return redirect(to: listActionRedirectPath(from: path.query, message: "allResumed"))
+        case "/resume-filtered-balloons":
+            let filteredIDs = Set(filteredBalloons(
+                itemNumberSearch: path.query["itemNumberSearch"] ?? "",
+                genreFilter: path.query["listGenreFilter"] ?? "",
+                middleCategoryFilter: path.query["listMiddleCategoryFilter"] ?? "",
+                smallCategoryFilter: path.query["listSmallCategoryFilter"] ?? "",
+                favoriteFilter: path.query["listFavoriteFilter"] ?? ""
+            ).map(\.id))
+            DispatchQueue.main.async {
+                let wasPaused = self.settings.isPaused
+                self.settings.setOnlyBalloonsEnabled(ids: filteredIDs)
+                self.settings.setPaused(false)
+                if wasPaused {
+                    self.pauseChanged()
+                } else {
+                    self.settingsChanged()
+                }
+            }
+            return redirect(to: listActionRedirectPath(from: path.query, message: "filteredResumed"))
+        case "/stop-filtered-balloons":
+            let filteredIDs = Set(filteredBalloons(
+                itemNumberSearch: path.query["itemNumberSearch"] ?? "",
+                genreFilter: path.query["listGenreFilter"] ?? "",
+                middleCategoryFilter: path.query["listMiddleCategoryFilter"] ?? "",
+                smallCategoryFilter: path.query["listSmallCategoryFilter"] ?? "",
+                favoriteFilter: path.query["listFavoriteFilter"] ?? ""
+            ).map(\.id))
+            DispatchQueue.main.async {
+                self.settings.setBalloonsEnabled(ids: filteredIDs, isEnabled: false)
+                self.settingsChanged()
+            }
+            return redirect(to: listActionRedirectPath(from: path.query, message: "filteredStopped"))
         case "/toggle-genre-balloons":
             if let genreName = path.query["genre"] {
                 let isEnabled = path.query["enabled"] == "1"
@@ -358,9 +390,14 @@ final class WebAdminServer {
         case "/set-launch-position":
             let positionName = path.query["launchPositionName"] ?? ""
             let climbSpeed = path.query.doubleValue(for: "climbSpeed", fallback: settings.climbSpeed)
+            let isSpeechOutputEnabled = path.query["speechOutputEnabled"] == "1"
             let selectedTab = path.query["tab"] ?? "create"
             DispatchQueue.main.async {
-                self.settings.updateLaunchSettings(positionName: positionName, climbSpeed: climbSpeed)
+                self.settings.updateLaunchSettings(
+                    positionName: positionName,
+                    climbSpeed: climbSpeed,
+                    isSpeechOutputEnabled: isSpeechOutputEnabled
+                )
                 self.settingsChanged()
             }
             return redirect(to: "/?tab=\(selectedTab.urlQueryEscaped)&message=launchPositionUpdated")
@@ -493,6 +530,12 @@ final class WebAdminServer {
                         textOffsetY: query.doubleValue(for: "textOffsetY", fallback: 0),
                         imageCaptionOffsetX: query.doubleValue(for: "imageCaptionOffsetX", fallback: 0),
                         imageCaptionOffsetY: query.doubleValue(for: "imageCaptionOffsetY", fallback: 0),
+                        backTextFontSize: query.doubleValue(for: "backTextFontSize", fallback: 0),
+                        backImageScale: query.doubleValue(for: "backImageScale", fallback: 1.0),
+                        backTextOffsetX: query.doubleValue(for: "backTextOffsetX", fallback: 0),
+                        backTextOffsetY: query.doubleValue(for: "backTextOffsetY", fallback: 0),
+                        backImageCaptionOffsetX: query.doubleValue(for: "backImageCaptionOffsetX", fallback: 0),
+                        backImageCaptionOffsetY: query.doubleValue(for: "backImageCaptionOffsetY", fallback: 0),
                         genreName: genreName,
                         middleCategoryName: middleCategoryName,
                         smallCategoryName: smallCategoryName,
@@ -523,6 +566,12 @@ final class WebAdminServer {
                         textOffsetY: query.doubleValue(for: "textOffsetY", fallback: 0),
                         imageCaptionOffsetX: query.doubleValue(for: "imageCaptionOffsetX", fallback: 0),
                         imageCaptionOffsetY: query.doubleValue(for: "imageCaptionOffsetY", fallback: 0),
+                        backTextFontSize: query.doubleValue(for: "backTextFontSize", fallback: 0),
+                        backImageScale: query.doubleValue(for: "backImageScale", fallback: 1.0),
+                        backTextOffsetX: query.doubleValue(for: "backTextOffsetX", fallback: 0),
+                        backTextOffsetY: query.doubleValue(for: "backTextOffsetY", fallback: 0),
+                        backImageCaptionOffsetX: query.doubleValue(for: "backImageCaptionOffsetX", fallback: 0),
+                        backImageCaptionOffsetY: query.doubleValue(for: "backImageCaptionOffsetY", fallback: 0),
                         genreName: genreName,
                         middleCategoryName: middleCategoryName,
                         smallCategoryName: smallCategoryName,
@@ -635,6 +684,12 @@ final class WebAdminServer {
             textOffsetY: clampedPositionOffset(query.doubleValue(for: "textOffsetY", fallback: 0)),
             imageCaptionOffsetX: clampedPositionOffset(query.doubleValue(for: "imageCaptionOffsetX", fallback: 0)),
             imageCaptionOffsetY: clampedPositionOffset(query.doubleValue(for: "imageCaptionOffsetY", fallback: 0)),
+            backTextFontSize: clampedFontSize(query.doubleValue(for: "backTextFontSize", fallback: 0)),
+            backImageScale: clampedImageScale(query.doubleValue(for: "backImageScale", fallback: 1.0)),
+            backTextOffsetX: clampedPositionOffset(query.doubleValue(for: "backTextOffsetX", fallback: 0)),
+            backTextOffsetY: clampedPositionOffset(query.doubleValue(for: "backTextOffsetY", fallback: 0)),
+            backImageCaptionOffsetX: clampedPositionOffset(query.doubleValue(for: "backImageCaptionOffsetX", fallback: 0)),
+            backImageCaptionOffsetY: clampedPositionOffset(query.doubleValue(for: "backImageCaptionOffsetY", fallback: 0)),
             genreName: genreName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "作成テスト",
             middleCategoryName: middleCategoryName,
             smallCategoryName: smallCategoryName,
@@ -763,6 +818,8 @@ final class WebAdminServer {
         let headers = [
             "HTTP/1.1 303 See Other",
             "Location: \(path)",
+            "Cache-Control: no-store",
+            "Pragma: no-cache",
             "Content-Length: 0",
             "Connection: close",
             "",
@@ -776,6 +833,8 @@ final class WebAdminServer {
         let headers = [
             "HTTP/1.1 \(status)",
             "Content-Type: \(contentType)",
+            "Cache-Control: no-store",
+            "Pragma: no-cache",
             "Content-Length: \(bodyData.count)",
             "Connection: close",
             "",
@@ -810,10 +869,12 @@ final class WebAdminServer {
         let randomIntervalMinSeconds = String(format: "%.0f", settings.randomIntervalMinSeconds)
         let randomIntervalMaxSeconds = String(format: "%.0f", settings.randomIntervalMaxSeconds)
         let climbSpeed = String(format: "%.0f", settings.climbSpeed)
-        let activeBalloon = settings.activeBalloon
+        let speechOutputChecked = settings.isSpeechOutputEnabled ? " checked" : ""
+        let speechOutputStateClass = settings.isSpeechOutputEnabled ? " enabled" : ""
+        let speechOutputStateText = settings.isSpeechOutputEnabled ? "ON" : "OFF"
         let editingID = editID.flatMap(UUID.init(uuidString:))
         let editingBalloon = editingID.flatMap { id in settings.balloons.first(where: { $0.id == id }) }
-        let formBalloon = editingBalloon ?? activeBalloon
+        let formBalloon = editingBalloon ?? newBalloonDraft()
         let imageName = formBalloon.imageName ?? ""
         let imageDataURL = formBalloon.imageDataURL ?? ""
         let backImageName = formBalloon.backImageName ?? ""
@@ -976,13 +1037,24 @@ final class WebAdminServer {
               margin-bottom: 18px;
             }
             .preview {
-              width: 320px;
+              width: min(100%, 560px);
               max-width: 100%;
-              display: inline-grid;
-              gap: 8px;
-              justify-items: center;
-              align-items: start;
+              display: grid;
+              grid-template-columns: auto minmax(180px, 1fr);
+              column-gap: 22px;
+              row-gap: 8px;
+              justify-items: start;
+              align-items: center;
               margin-bottom: 22px;
+            }
+            .preview-guidance {
+              align-self: start;
+              margin-top: 42px;
+              color: #3c4043;
+              font-size: 14px;
+              font-weight: 800;
+              line-height: 1.45;
+              white-space: nowrap;
             }
             .preview-balloon {
               --preview-size: 96px;
@@ -1483,6 +1555,8 @@ final class WebAdminServer {
             .preview-controls {
               display: flex;
               justify-content: center;
+              grid-column: 1;
+              justify-self: center;
             }
             .preview-side-toggle {
               display: inline-flex;
@@ -2134,6 +2208,23 @@ final class WebAdminServer {
               padding: 0 8px;
               box-sizing: border-box;
             }
+            .filtered-actions {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 10px;
+              margin: 12px 0 18px;
+              align-items: center;
+              justify-content: flex-end;
+            }
+            .filtered-actions .button {
+              min-width: 190px;
+              height: 40px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              box-sizing: border-box;
+              white-space: nowrap;
+            }
             .empty {
               color: #5f6368;
               margin: 12px 0 0;
@@ -2193,9 +2284,9 @@ final class WebAdminServer {
             }
             .header-position-form {
               flex: 1;
-              max-width: 620px;
+              max-width: 760px;
               display: grid;
-              grid-template-columns: minmax(110px, 0.65fr) minmax(125px, 0.75fr) minmax(150px, 1fr) auto;
+              grid-template-columns: minmax(126px, 0.65fr) minmax(110px, 0.65fr) minmax(125px, 0.75fr) minmax(150px, 1fr) auto;
               gap: 8px;
               align-items: end;
               margin: 0;
@@ -2215,6 +2306,28 @@ final class WebAdminServer {
               padding: 0 12px;
               white-space: nowrap;
             }
+            .speech-mode-control input {
+              position: absolute;
+              opacity: 0;
+              pointer-events: none;
+            }
+            .speech-mode-toggle {
+              height: 36px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              border: 1px solid #b8bdc6;
+              border-radius: 6px;
+              background: #fff;
+              color: #5f6368;
+              font-size: 15px;
+              font-weight: 800;
+            }
+            .speech-mode-toggle.enabled {
+              color: #fff;
+              border-color: #1769e0;
+              background: #1769e0;
+            }
             @media (max-width: 620px) {
               header, .grid, .preview, .item, .panel-heading { display: block; }
               .heading-actions { justify-content: flex-start; margin: 12px 0 0; }
@@ -2223,7 +2336,10 @@ final class WebAdminServer {
               .explanation-image-grid { grid-template-columns: 1fr; }
               label { margin-bottom: 14px; }
               .preview-balloon { margin-bottom: 14px; }
+              .preview-guidance { margin: 0 0 14px; white-space: normal; }
               .item-dot { margin-bottom: 8px; }
+              .filtered-actions { justify-content: stretch; }
+              .filtered-actions .button { width: 100%; }
               .header-position-form {
                 min-width: 0;
                 grid-template-columns: 1fr;
@@ -2241,6 +2357,12 @@ final class WebAdminServer {
               </div>
               <form class="header-position-form" action="/set-launch-position" method="post">
                 <input type="hidden" name="tab" value="\(selectedTab.htmlEscaped)">
+                <label class="speech-mode-control">
+                  音声出力モード
+                  <input type="hidden" name="speechOutputEnabled" value="0">
+                  <input name="speechOutputEnabled" type="checkbox" value="1"\(speechOutputChecked) onchange="this.form.submit()">
+                  <span class="speech-mode-toggle\(speechOutputStateClass)">\(speechOutputStateText)</span>
+                </label>
                 <label>
                   一旦停止時間（秒）
                   <input name="middlePauseDuration" form="balloonCreateForm" type="number" min="0" step="0.1" value="\(formatDuration(formBalloon.middlePauseDuration))">
@@ -2364,6 +2486,12 @@ final class WebAdminServer {
             const textOffsetYInput = document.querySelector('input[name="textOffsetY"]');
             const imageCaptionOffsetXInput = document.querySelector('input[name="imageCaptionOffsetX"]');
             const imageCaptionOffsetYInput = document.querySelector('input[name="imageCaptionOffsetY"]');
+            const backTextFontSizeInput = document.querySelector('input[name="backTextFontSize"]');
+            const backImageScaleInput = document.querySelector('input[name="backImageScale"]');
+            const backTextOffsetXInput = document.querySelector('input[name="backTextOffsetX"]');
+            const backTextOffsetYInput = document.querySelector('input[name="backTextOffsetY"]');
+            const backImageCaptionOffsetXInput = document.querySelector('input[name="backImageCaptionOffsetX"]');
+            const backImageCaptionOffsetYInput = document.querySelector('input[name="backImageCaptionOffsetY"]');
             const attachmentPreviewModal = document.querySelector("#attachmentPreviewModal");
             const attachmentPreviewTitle = document.querySelector("#attachmentPreviewTitle");
             const attachmentPreviewFilename = document.querySelector("#attachmentPreviewFilename");
@@ -2561,7 +2689,7 @@ final class WebAdminServer {
               window.speechSynthesis.cancel();
               const utterance = new SpeechSynthesisUtterance(text);
               utterance.lang = "ja-JP";
-              utterance.rate = 1;
+              utterance.rate = 0.9;
               window.speechSynthesis.speak(utterance);
             });
 
@@ -2573,10 +2701,33 @@ final class WebAdminServer {
               return document.querySelector('input[name="sizeName"]:checked')?.value || "";
             }
 
+            function inputForName(name) {
+              return document.querySelector(`input[name="${name}"]`);
+            }
+
+            function activePreviewSide() {
+              return document.querySelector("[data-preview-side].active")?.dataset.previewSide || "front";
+            }
+
+            function previewFieldName(frontName, backName) {
+              return activePreviewSide() === "back" ? backName : frontName;
+            }
+
+            function previewSideForFieldName(name) {
+              return name?.startsWith("back") ? "back" : "front";
+            }
+
+            function ensurePreviewSideForFieldName(name) {
+              const side = previewSideForFieldName(name);
+              if (side !== activePreviewSide()) {
+                setPreviewSide(side);
+              }
+            }
+
             function sizedFont(input, fallback) {
               const value = Number(input?.value || 0);
               const scale = currentScale();
-              const fallbackSize = input?.name === "textFontSize" && scale > 1 ? 39 : fallback;
+              const fallbackSize = ["textFontSize", "backTextFontSize"].includes(input?.name) && fallback === 26 && scale > 1 ? 39 : fallback;
               return `${(value > 0 ? value : fallbackSize) * scale}px`;
             }
 
@@ -2589,14 +2740,15 @@ final class WebAdminServer {
               });
             }
 
-            function currentImageScale() {
-              const value = Number(imageScaleInput?.value || 1);
+            function currentImageScale(name = previewFieldName("imageScale", "backImageScale")) {
+              const input = inputForName(name);
+              const value = Number(input?.value || 1);
               return Math.min(2.0, Math.max(0.6, Number.isFinite(value) ? value : 1));
             }
 
             function updateImageScaleDisplays() {
-              const scale = currentImageScale();
               document.querySelectorAll("[data-image-scale-display]").forEach((display) => {
+                const scale = currentImageScale(display.dataset.imageScaleDisplay || "imageScale");
                 display.textContent = Math.abs(scale - 1) < 0.01 ? "自動" : `${Math.round(scale * 100)}%`;
               });
             }
@@ -2638,42 +2790,53 @@ final class WebAdminServer {
             function applyPreviewTextPositions() {
               if (!previewBody) return;
               const contentSize = 96 * currentScale() * 0.82;
-              previewBody.style.setProperty("--preview-text-offset-x", `${currentOffset(textOffsetXInput) * contentSize}px`);
-              previewBody.style.setProperty("--preview-text-offset-y", `${currentOffset(textOffsetYInput) * contentSize}px`);
-              previewBody.style.setProperty("--preview-image-offset-x", `${currentOffset(imageCaptionOffsetXInput) * contentSize}px`);
-              previewBody.style.setProperty("--preview-image-offset-y", `${currentOffset(imageCaptionOffsetYInput) * contentSize}px`);
+              previewBody.style.setProperty("--preview-text-offset-x", `${currentOffset(inputForName(previewFieldName("textOffsetX", "backTextOffsetX"))) * contentSize}px`);
+              previewBody.style.setProperty("--preview-text-offset-y", `${currentOffset(inputForName(previewFieldName("textOffsetY", "backTextOffsetY"))) * contentSize}px`);
+              previewBody.style.setProperty("--preview-image-offset-x", `${currentOffset(inputForName(previewFieldName("imageCaptionOffsetX", "backImageCaptionOffsetX"))) * contentSize}px`);
+              previewBody.style.setProperty("--preview-image-offset-y", `${currentOffset(inputForName(previewFieldName("imageCaptionOffsetY", "backImageCaptionOffsetY"))) * contentSize}px`);
               updateOffsetDisplays();
             }
 
             function applyPreviewFontSizes() {
               if (!previewBody) return;
-              previewBody.style.fontSize = sizedFont(textFontSizeInput, 26);
+              const fontInput = inputForName(previewFieldName("textFontSize", "backTextFontSize"));
+              previewBody.style.fontSize = sizedFont(fontInput, 26);
               previewBody.querySelectorAll(".preview-image-caption").forEach((caption) => {
-                caption.style.fontSize = sizedFont(textFontSizeInput, 12);
+                caption.style.fontSize = sizedFont(fontInput, 12);
               });
               updateFontSizeDisplays();
             }
 
-            function adjustImageScale(delta) {
-              if (!imageScaleInput) return;
-              imageScaleInput.value = (Math.round(Math.min(2.0, Math.max(0.6, currentImageScale() + delta)) * 10) / 10).toFixed(1);
+            function currentFontStepBase() {
+              return previewBody?.querySelector(".preview-image-caption") ? 12 : 26;
+            }
+
+            function adjustImageScale(targetName, delta) {
+              const input = inputForName(targetName || previewFieldName("imageScale", "backImageScale"));
+              if (!input) return;
+              ensurePreviewSideForFieldName(input.name);
+              input.value = (Math.round(Math.min(2.0, Math.max(0.6, currentImageScale(input.name) + delta)) * 10) / 10).toFixed(1);
               applyPreviewImageScale();
             }
 
-            function resetImageScale() {
-              if (!imageScaleInput) return;
-              imageScaleInput.value = "1.0";
+            function resetImageScale(targetName) {
+              const input = inputForName(targetName || previewFieldName("imageScale", "backImageScale"));
+              if (!input) return;
+              ensurePreviewSideForFieldName(input.name);
+              input.value = "1.0";
               applyPreviewImageScale();
             }
 
             function adjustOffset(targetName, delta) {
               const input = document.querySelector(`input[name="${targetName}"]`);
               if (!input) return;
+              ensurePreviewSideForFieldName(input.name);
               input.value = (Math.round(Math.min(0.45, Math.max(-0.45, currentOffset(input) + delta)) * 100) / 100).toFixed(2);
               applyPreviewTextPositions();
             }
 
             function resetPosition(xName, yName) {
+              ensurePreviewSideForFieldName(xName);
               [xName, yName].forEach((name) => {
                 const input = document.querySelector(`input[name="${name}"]`);
                 if (input) input.value = "0.00";
@@ -2689,19 +2852,32 @@ final class WebAdminServer {
               applyPreviewTextPositions();
             }
 
-            function applyInitialImageLayout() {
-              setPosition("imageCaptionOffsetX", "imageCaptionOffsetY", 0, 0);
-              applySizePreset(selectedSizeName());
+            function applyInitialImageLayout(side = activePreviewSide()) {
+              if (side === "back") {
+                setPosition("backImageCaptionOffsetX", "backImageCaptionOffsetY", 0, 0);
+                applySizePreset(selectedSizeName(), "back");
+                return;
+              }
+
+              setPosition("imageCaptionOffsetX", "imageCaptionOffsetY", 0, 0.15);
+              applySizePreset(selectedSizeName(), "front");
             }
 
-            function applySizePreset(sizeName) {
-              if (textFontSizeInput) textFontSizeInput.value = "16";
-              setPosition("textOffsetX", "textOffsetY", 0, -0.03);
+            function applySizePreset(sizeName, side = activePreviewSide()) {
+              if (side === "back") {
+                if (backTextFontSizeInput) backTextFontSizeInput.value = "16";
+                setPosition("backTextOffsetX", "backTextOffsetY", 0, -0.03);
+                return;
+              }
+
+              if (textFontSizeInput) textFontSizeInput.value = "10";
+              setPosition("textOffsetX", "textOffsetY", 0, 0.07);
             }
 
             function applySizeSelection(input) {
               if (!input?.checked) return;
-              applySizePreset(input.value);
+              applySizePreset(input.value, "front");
+              applySizePreset(input.value, "back");
               if (previewSizeMeta) previewSizeMeta.textContent = `サイズ: ${input.value}`;
               applyPreviewFontSizes();
               applyPreviewImageScale();
@@ -2767,8 +2943,9 @@ final class WebAdminServer {
               const input = document.querySelector(`input[name="${targetName}"]`);
               if (!input) return;
 
+              ensurePreviewSideForFieldName(input.name);
               const current = Number(input.value || 0);
-              const base = current > 0 ? current : 26;
+              const base = current > 0 ? current : currentFontStepBase();
               input.value = String(Math.min(90, Math.max(4, base + delta)));
               applyPreviewFontSizes();
             }
@@ -2776,12 +2953,9 @@ final class WebAdminServer {
             function resetFontSize(targetName) {
               const input = document.querySelector(`input[name="${targetName}"]`);
               if (!input) return;
+              ensurePreviewSideForFieldName(input.name);
               input.value = "0";
               applyPreviewFontSizes();
-            }
-
-            function activePreviewSide() {
-              return document.querySelector("[data-preview-side].active")?.dataset.previewSide || "front";
             }
 
             function previewHasBackSide() {
@@ -2789,7 +2963,7 @@ final class WebAdminServer {
             }
 
             function applyPreviewBodyState() {
-              previewBody?.classList.toggle("has-back", previewHasBackSide());
+              previewBody?.classList.toggle("has-back", activePreviewSide() === "back" && previewHasBackSide());
             }
 
             function captionLineCount(text) {
@@ -2941,22 +3115,43 @@ final class WebAdminServer {
               if (field) field.checked = checked;
             }
 
+            function clearImageSlot({ dataInput, fileInput, removeInput, item, status, checkButton }) {
+              if (fileInput) fileInput.value = "";
+              if (dataInput) dataInput.value = "";
+              resetRemoveControl(removeInput);
+              updateAttachmentState(item, status, checkButton, false);
+            }
+
+            function clearPreviewMarkers() {
+              previewBalloon?.querySelector(".preview-badges")?.remove();
+              previewBalloon?.querySelector(".preview-item-number")?.remove();
+            }
+
             function resetCreateForm(event) {
               event?.preventDefault();
+              window.location.replace(`/?tab=create&reset=${Date.now()}`);
+              return;
+
               const form = resetCreateFormButton?.closest("form");
               if (!form) return;
 
               resetField(form, 'input[name="title"]', "");
-              resetField(form, '[name="text"]', "");
+              resetField(form, '[name="text"]', "裏売値");
               resetField(form, '[name="backText"]', "");
               resetField(form, 'textarea[name="speechText"]', "");
               resetField(form, 'textarea[name="explanationText"]', "");
-              resetField(form, 'input[name="textFontSize"]', "16");
+              resetField(form, 'input[name="textFontSize"]', "10");
               resetField(form, 'input[name="imageScale"]', "1.0");
               resetField(form, 'input[name="textOffsetX"]', "0.00");
-              resetField(form, 'input[name="textOffsetY"]', "-0.03");
+              resetField(form, 'input[name="textOffsetY"]', "0.07");
               resetField(form, 'input[name="imageCaptionOffsetX"]', "0.00");
-              resetField(form, 'input[name="imageCaptionOffsetY"]', "0.00");
+              resetField(form, 'input[name="imageCaptionOffsetY"]', "0.15");
+              resetField(form, 'input[name="backTextFontSize"]', "16");
+              resetField(form, 'input[name="backImageScale"]', "1.0");
+              resetField(form, 'input[name="backTextOffsetX"]', "0.00");
+              resetField(form, 'input[name="backTextOffsetY"]', "-0.03");
+              resetField(form, 'input[name="backImageCaptionOffsetX"]', "0.00");
+              resetField(form, 'input[name="backImageCaptionOffsetY"]', "0.00");
               resetField(form, 'input[name="intervalMinutes"]', "1.0");
               resetField(form, 'input[name="climbSpeed"]', "400");
               resetField(form, 'input[name="randomIntervalMinSeconds"]', "5");
@@ -2973,6 +3168,7 @@ final class WebAdminServer {
               if (customBalloonDesignDataURLInput) customBalloonDesignDataURLInput.value = "";
               updateCustomBalloonDesignScale(1);
               updateCustomBalloonDesignThumbnail("");
+              if (customBalloonDesignRadio) customBalloonDesignRadio.checked = false;
               const defaultPosition = form.querySelector('input[name="positionName"][value="ランダム"]') || form.querySelector('input[name="positionName"]');
               if (defaultPosition) defaultPosition.value = "ランダム";
               const defaultSize = form.querySelector('input[name="sizeName"][value="ラージ"]') || form.querySelector('input[name="sizeName"]');
@@ -2998,24 +3194,28 @@ final class WebAdminServer {
               updateManageSmallCategoryMiddleCategoryOptions();
               updateSmallCategoryOptions();
               updateManageSmallCategoryOptions();
-              if (imageFileInput) imageFileInput.value = "";
-              if (imageDataURLInput) imageDataURLInput.value = "";
-              resetRemoveControl(removeImageDataInput);
-              updateAttachmentState(imageAttachmentItem, imageStatus, imageCheckButton, false);
-              if (backImageFileInput) backImageFileInput.value = "";
-              if (backImageDataURLInput) backImageDataURLInput.value = "";
-              resetRemoveControl(removeBackImageDataInput);
-              updateAttachmentState(backImageAttachmentItem, backImageStatus, backImageCheckButton, false);
+              clearImageSlot({
+                dataInput: imageDataURLInput,
+                fileInput: imageFileInput,
+                removeInput: removeImageDataInput,
+                item: imageAttachmentItem,
+                status: imageStatus,
+                checkButton: imageCheckButton
+              });
+              clearImageSlot({
+                dataInput: backImageDataURLInput,
+                fileInput: backImageFileInput,
+                removeInput: removeBackImageDataInput,
+                item: backImageAttachmentItem,
+                status: backImageStatus,
+                checkButton: backImageCheckButton
+              });
               applyPreviewImageScale();
               applyPreviewTextPositions();
-              explanationImageSlots.forEach(({ fileInput, dataInput, removeInput, item, status, checkButton }) => {
-                if (fileInput) fileInput.value = "";
-                if (dataInput) dataInput.value = "";
-                resetRemoveControl(removeInput);
-                updateAttachmentState(item, status, checkButton, false);
-              });
+              explanationImageSlots.forEach(clearImageSlot);
               previewBalloon?.classList.add("large");
               previewBalloon?.classList.remove("extra-large");
+              clearPreviewMarkers();
               setPreviewSide("front");
               if (previewTitleMeta) previewTitleMeta.textContent = "表面: ";
               if (previewBackMeta) previewBackMeta.textContent = "裏面: なし";
@@ -3204,8 +3404,13 @@ final class WebAdminServer {
                     addSample(width - 1, y);
                   }
 
+                  const backgroundEdgeColors = edgeColors.filter(([r, g, b]) => {
+                    const brightness = (r + g + b) / 3;
+                    const colorSpread = Math.max(r, g, b) - Math.min(r, g, b);
+                    return brightness > 185 && colorSpread < 70;
+                  });
                   const resemblesEdgeBackground = (r, g, b) => {
-                    return edgeColors.some(([er, eg, eb]) => {
+                    return backgroundEdgeColors.some(([er, eg, eb]) => {
                       return Math.abs(r - er) + Math.abs(g - eg) + Math.abs(b - eb) < 42;
                     });
                   };
@@ -3223,7 +3428,7 @@ final class WebAdminServer {
                       const r = pixels[index];
                       const g = pixels[index + 1];
                       const b = pixels[index + 2];
-                      if (edgeColors.length > 0 && resemblesEdgeBackground(r, g, b)) continue;
+                      if (backgroundEdgeColors.length > 0 && resemblesEdgeBackground(r, g, b)) continue;
 
                       minX = Math.min(minX, x);
                       minY = Math.min(minY, y);
@@ -3245,19 +3450,20 @@ final class WebAdminServer {
 
                   const cropWidth = maxX - minX + 1;
                   const cropHeight = maxY - minY + 1;
+                  const outputPadding = Math.ceil(Math.max(cropWidth, cropHeight) * 0.08);
                   const output = document.createElement("canvas");
-                  output.width = cropWidth;
-                  output.height = cropHeight;
+                  output.width = cropWidth + outputPadding * 2;
+                  output.height = cropHeight + outputPadding * 2;
                   const outputContext = output.getContext("2d");
                   outputContext.imageSmoothingEnabled = true;
                   outputContext.imageSmoothingQuality = "high";
-                  outputContext.clearRect(0, 0, cropWidth, cropHeight);
-                  outputContext.drawImage(canvas, minX, minY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-                  const outputPixels = outputContext.getImageData(0, 0, cropWidth, cropHeight);
+                  outputContext.clearRect(0, 0, output.width, output.height);
+                  outputContext.drawImage(canvas, minX, minY, cropWidth, cropHeight, outputPadding, outputPadding, cropWidth, cropHeight);
+                  const outputPixels = outputContext.getImageData(0, 0, output.width, output.height);
                   const outputData = outputPixels.data;
                   for (let index = 0; index < outputData.length; index += 4) {
                     const alpha = outputData[index + 3];
-                    if (alpha <= 20 || (edgeColors.length > 0 && resemblesEdgeBackground(outputData[index], outputData[index + 1], outputData[index + 2]))) {
+                    if (alpha <= 20 || (backgroundEdgeColors.length > 0 && resemblesEdgeBackground(outputData[index], outputData[index + 1], outputData[index + 2]))) {
                       outputData[index + 3] = 0;
                     }
                   }
@@ -3273,7 +3479,21 @@ final class WebAdminServer {
               return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => {
-                  croppedCustomBalloonDesignDataURL(reader.result, maxSize).then(resolve, reject);
+                  const image = new Image();
+                  image.onload = () => {
+                    const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+                    const canvas = document.createElement("canvas");
+                    canvas.width = Math.max(1, Math.round(image.width * scale));
+                    canvas.height = Math.max(1, Math.round(image.height * scale));
+                    const context = canvas.getContext("2d");
+                    context.imageSmoothingEnabled = true;
+                    context.imageSmoothingQuality = "high";
+                    context.clearRect(0, 0, canvas.width, canvas.height);
+                    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL("image/png"));
+                  };
+                  image.onerror = reject;
+                  image.src = reader.result;
                 };
                 reader.onerror = reject;
                 reader.readAsDataURL(file);
@@ -3321,8 +3541,8 @@ final class WebAdminServer {
                 imageDataURLInput.value = dataURL;
                 resetRemoveControl(removeImageDataInput);
                 updateAttachmentState(imageAttachmentItem, imageStatus, imageCheckButton, true);
-                applyInitialImageLayout();
                 setPreviewSide("front");
+                applyInitialImageLayout("front");
                 showAttachmentPreview("表に添付した画像", file, dataURL);
               } catch {
                 window.alert("画像を読み込めませんでした。別の画像を選んでください。");
@@ -3354,8 +3574,8 @@ final class WebAdminServer {
                 backImageDataURLInput.value = dataURL;
                 resetRemoveControl(removeBackImageDataInput);
                 updateAttachmentState(backImageAttachmentItem, backImageStatus, backImageCheckButton, true);
-                applyInitialImageLayout();
                 setPreviewSide("back");
+                applyInitialImageLayout("back");
                 showAttachmentPreview("裏に添付した画像", file, dataURL);
               } catch {
                 window.alert("裏面画像を読み込めませんでした。別の画像を選んでください。");
@@ -3436,16 +3656,6 @@ final class WebAdminServer {
             });
             updateCustomBalloonDesignThumbnail(customBalloonDesignDataURLInput?.value || "");
             updateCustomBalloonDesignScale(currentCustomBalloonDesignScale());
-            if (customBalloonDesignDataURLInput?.value) {
-              croppedCustomBalloonDesignDataURL(customBalloonDesignDataURLInput.value).then((croppedDataURL) => {
-                if (!croppedDataURL || croppedDataURL === customBalloonDesignDataURLInput.value) return;
-                customBalloonDesignDataURLInput.value = croppedDataURL;
-                updateCustomBalloonDesignThumbnail(croppedDataURL);
-                if (customBalloonDesignRadio?.checked) {
-                  applyCustomBalloonDesign(croppedDataURL);
-                }
-              }).catch(() => {});
-            }
 
             previewSideButtons.forEach((button) => {
               button.addEventListener("click", () => setPreviewSide(button.dataset.previewSide || "front"));
@@ -3465,11 +3675,11 @@ final class WebAdminServer {
             });
             document.querySelectorAll("[data-image-scale-delta]").forEach((button) => {
               button.addEventListener("click", () => {
-                adjustImageScale(Number(button.dataset.imageScaleDelta || 0));
+                adjustImageScale(button.dataset.imageScaleTarget, Number(button.dataset.imageScaleDelta || 0));
               });
             });
             document.querySelectorAll("[data-image-scale-auto]").forEach((button) => {
-              button.addEventListener("click", resetImageScale);
+              button.addEventListener("click", () => resetImageScale(button.dataset.imageScaleTarget));
             });
             document.querySelectorAll("[data-position-target]").forEach((button) => {
               button.addEventListener("click", () => {
@@ -3824,47 +4034,72 @@ final class WebAdminServer {
         returnTo: String?,
         returnScrollY: String?
     ) -> String {
+        let isEditing = editingID != nil
+        let formBalloon = isEditing ? activeBalloon : newBalloonDraft()
+        let formImageDataURL = isEditing ? imageDataURL : ""
+        let formBackImageDataURL = isEditing ? backImageDataURL : ""
+        let formPreviewContent = isEditing
+            ? previewContent
+            : renderPreviewContent(
+                imageDataURL: "",
+                imageName: "",
+                text: frontTextInputValue(for: formBalloon)
+            )
         let hiddenIDInput = editingID.map { "<input type=\"hidden\" name=\"id\" value=\"\($0.uuidString)\">" } ?? ""
         let returnToInput = editingID == nil ? "" : "<input type=\"hidden\" name=\"returnTo\" value=\"\((returnTo ?? "/?tab=list").htmlEscaped)\">"
         let returnScrollYInput = editingID == nil ? "" : "<input type=\"hidden\" name=\"returnScrollY\" value=\"\((returnScrollY ?? "0").htmlEscaped)\">"
         let submitTitle = editingID == nil ? "保存" : "更新"
         let panelTitle = editingID == nil ? "風船作成" : "風船編集"
-        let titleValue = editingID == nil ? "" : activeBalloon.title.htmlEscaped
-        let textValue = editingID == nil ? "" : frontTextInputValue(for: activeBalloon).htmlEscaped
-        let speechTextValue = editingID == nil ? "" : activeBalloon.speechText.htmlEscaped
-        let backTextValue = editingID == nil ? "" : backTextInputValue(for: activeBalloon).htmlEscaped
-        let textFontSize = editingID == nil ? "16" : formatFontSize(activeBalloon.textFontSize)
-        let imageScale = formatImageScale(activeBalloon.imageScale)
-        let textOffsetX = formatPositionOffset(activeBalloon.textOffsetX)
-        let textOffsetY = editingID == nil ? "-0.03" : formatPositionOffset(activeBalloon.textOffsetY)
-        let imageCaptionOffsetX = formatPositionOffset(activeBalloon.imageCaptionOffsetX)
-        let imageCaptionOffsetY = formatPositionOffset(activeBalloon.imageCaptionOffsetY)
+        let titleValue = isEditing ? formBalloon.title.htmlEscaped : ""
+        let textValue = frontTextInputValue(for: formBalloon).htmlEscaped
+        let speechTextValue = isEditing ? formBalloon.speechText.htmlEscaped : ""
+        let speechEntryStyle = settings.isSpeechOutputEnabled ? "" : " style=\"display: none;\""
+        let backTextValue = isEditing ? backTextInputValue(for: formBalloon).htmlEscaped : ""
+        let textFontSize = formatFontSize(formBalloon.textFontSize)
+        let imageScale = formatImageScale(formBalloon.imageScale)
+        let textOffsetX = formatPositionOffset(formBalloon.textOffsetX)
+        let textOffsetY = formatPositionOffset(formBalloon.textOffsetY)
+        let imageCaptionOffsetX = formatPositionOffset(formBalloon.imageCaptionOffsetX)
+        let imageCaptionOffsetY = formatPositionOffset(formBalloon.imageCaptionOffsetY)
+        let backTextFontSize = formatFontSize(formBalloon.backTextFontSize)
+        let backImageScale = formatImageScale(formBalloon.backImageScale)
+        let backTextOffsetX = formatPositionOffset(formBalloon.backTextOffsetX)
+        let backTextOffsetY = formatPositionOffset(formBalloon.backTextOffsetY)
+        let backImageCaptionOffsetX = formatPositionOffset(formBalloon.backImageCaptionOffsetX)
+        let backImageCaptionOffsetY = formatPositionOffset(formBalloon.backImageCaptionOffsetY)
         let resetLink = editingID == nil ? "" : "<a class=\"button\" href=\"/?tab=create\">新規作成に戻す</a>"
-        let genreOptions = renderGenreOptions(selectedName: activeBalloon.genreName)
-        let middleCategoryOptions = renderMiddleCategoryOptions(selectedName: activeBalloon.middleCategoryName, selectedGenreName: activeBalloon.genreName)
+        let genreOptions = renderGenreOptions(selectedName: formBalloon.genreName)
+        let middleCategoryOptions = renderMiddleCategoryOptions(selectedName: formBalloon.middleCategoryName, selectedGenreName: formBalloon.genreName)
         let smallCategoryOptions = renderSmallCategoryOptions(
-            selectedName: activeBalloon.smallCategoryName,
-            selectedGenreName: activeBalloon.genreName,
-            selectedMiddleCategoryName: activeBalloon.middleCategoryName
+            selectedName: formBalloon.smallCategoryName,
+            selectedGenreName: formBalloon.genreName,
+            selectedMiddleCategoryName: formBalloon.middleCategoryName
         )
-        let explanationImageInputs = renderExplanationImageInputs(for: activeBalloon)
-        let explanationImageControls = renderExplanationImageControls(for: activeBalloon)
-        let customBalloonDesignDataURL = activeBalloon.customBalloonDesignDataURL ?? ""
-        let customBalloonDesignScale = formatCustomBalloonDesignScale(activeBalloon.customBalloonDesignScale)
-        let hasCustomBalloonDesign = !customBalloonDesignDataURL.isEmpty && activeBalloon.colorName == OverlaySettings.customBalloonDesignName
+        let explanationImageInputs = renderExplanationImageInputs(for: formBalloon)
+        let explanationImageControls = renderExplanationImageControls(for: formBalloon)
+        let customBalloonDesignDataURL = formBalloon.customBalloonDesignDataURL ?? ""
+        let customBalloonDesignScale = formatCustomBalloonDesignScale(formBalloon.customBalloonDesignScale)
+        let hasCustomBalloonDesign = !customBalloonDesignDataURL.isEmpty && formBalloon.colorName == OverlaySettings.customBalloonDesignName
+        let renderedColorOptions = isEditing
+            ? colorOptions
+            : renderColorOptions(
+                selectedName: formBalloon.colorName,
+                customBalloonDesignDataURL: formBalloon.customBalloonDesignDataURL,
+                customBalloonDesignScale: formBalloon.customBalloonDesignScale
+            )
+        let renderedSizeOptions = isEditing ? sizeOptions : renderSizeOptions(selectedName: formBalloon.sizeName)
         let previewBodyClasses = [
             "preview-body",
-            hasCustomBalloonDesign ? "custom-balloon-design" : "",
-            hasBackSide(activeBalloon) ? "has-back" : ""
+            hasCustomBalloonDesign ? "custom-balloon-design" : ""
         ].filter { !$0.isEmpty }.joined(separator: " ")
         let previewBodyClass = previewBodyClasses
         let previewBodyStyle = hasCustomBalloonDesign
             ? " style=\"--custom-balloon-design-image: url(&quot;\(customBalloonDesignDataURL.htmlEscaped)&quot;); --custom-balloon-design-scale: \(customBalloonDesignScale);\""
             : ""
-        let hasFrontImage = imageDataURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
+        let hasFrontImage = formImageDataURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
         let frontImageAttachmentClass = hasFrontImage ? " attached" : ""
         let frontImageStatus = hasFrontImage ? "添付済み" : "未添付"
-        let hasBackImage = backImageDataURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
+        let hasBackImage = formBackImageDataURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
         let backImageAttachmentClass = hasBackImage ? " attached" : ""
         let backImageStatus = hasBackImage ? "添付済み" : "未添付"
         let categoryEditPanel = renderCategoryEditPanel(
@@ -3875,19 +4110,19 @@ final class WebAdminServer {
             editSmallCategoryMiddleCategoryName: editSmallCategoryMiddleCategoryName,
             editSmallCategoryName: editSmallCategoryName
         )
-        let previewBackBadge = hasBackSide(activeBalloon)
+        let previewBackBadge = hasBackSide(formBalloon)
             ? "<span id=\"previewBackBadge\" class=\"preview-badge\">裏あり</span>"
             : ""
-        let hasExplanation = activeBalloon.explanationText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
-            || !activeBalloon.explanationImageDataURLs.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.isEmpty
+        let hasExplanation = formBalloon.explanationText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty != nil
+            || !formBalloon.explanationImageDataURLs.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.isEmpty
         let previewExplanationBadge = hasExplanation
             ? "<span class=\"preview-badge dark\">•••</span>"
             : ""
         let previewBadges = previewBackBadge.isEmpty && previewExplanationBadge.isEmpty
             ? ""
             : "<div class=\"preview-badges\">\(previewBackBadge)\(previewExplanationBadge)</div>"
-        let previewItemNumber = activeBalloon.itemNumber > 0
-            ? "<div class=\"preview-item-number\">\(activeBalloon.itemNumber)</div>"
+        let previewItemNumber = formBalloon.itemNumber > 0
+            ? "<div class=\"preview-item-number\">\(formBalloon.itemNumber)</div>"
             : ""
 
         return """
@@ -3896,8 +4131,8 @@ final class WebAdminServer {
             \(hiddenIDInput)
             \(returnToInput)
             \(returnScrollYInput)
-            <input id="imageDataURLInput" type="hidden" name="imageDataURL" value="\(imageDataURL.htmlEscaped)">
-            <input id="backImageDataURLInput" type="hidden" name="backImageDataURL" value="\(backImageDataURL.htmlEscaped)">
+            <input id="imageDataURLInput" type="hidden" name="imageDataURL" value="\(formImageDataURL.htmlEscaped)">
+            <input id="backImageDataURLInput" type="hidden" name="backImageDataURL" value="\(formBackImageDataURL.htmlEscaped)">
             <input id="customBalloonDesignDataURLInput" type="hidden" name="customBalloonDesignDataURL" value="\(customBalloonDesignDataURL.htmlEscaped)">
             <input id="customBalloonDesignScaleInput" type="hidden" name="customBalloonDesignScale" value="\(customBalloonDesignScale)">
             <input type="hidden" name="imageCaptionFontSize" value="0">
@@ -3906,15 +4141,20 @@ final class WebAdminServer {
             <input id="textOffsetYInput" type="hidden" name="textOffsetY" value="\(textOffsetY)">
             <input id="imageCaptionOffsetXInput" type="hidden" name="imageCaptionOffsetX" value="\(imageCaptionOffsetX)">
             <input id="imageCaptionOffsetYInput" type="hidden" name="imageCaptionOffsetY" value="\(imageCaptionOffsetY)">
+            <input id="backImageScaleInput" type="hidden" name="backImageScale" value="\(backImageScale)">
+            <input id="backTextOffsetXInput" type="hidden" name="backTextOffsetX" value="\(backTextOffsetX)">
+            <input id="backTextOffsetYInput" type="hidden" name="backTextOffsetY" value="\(backTextOffsetY)">
+            <input id="backImageCaptionOffsetXInput" type="hidden" name="backImageCaptionOffsetX" value="\(backImageCaptionOffsetX)">
+            <input id="backImageCaptionOffsetYInput" type="hidden" name="backImageCaptionOffsetY" value="\(backImageCaptionOffsetY)">
             <input type="hidden" name="intervalMinutes" value="\(intervalMinutes)">
-            <input type="hidden" name="positionName" value="\(activeBalloon.positionName.htmlEscaped)">
+            <input type="hidden" name="positionName" value="\(formBalloon.positionName.htmlEscaped)">
             <input type="hidden" name="pausesAtMiddle" value="on">
             \(explanationImageInputs)
             <div class="panel-heading">
               <h2>\(panelTitle)</h2>
               <span class="heading-actions">
                 <button id="testBalloonButton" class="primary" type="button">作成中の風船をテスト表示</button>
-                <button id="resetCreateFormButton" type="button">入力中の内容をリセット</button>
+                <a id="resetCreateFormButton" class="button" href="/?tab=create">入力中の内容をリセット</a>
               </span>
             </div>
             <label class="top-field">
@@ -3924,10 +4164,11 @@ final class WebAdminServer {
             <div class="preview" id="previewArea">
               <div class="preview-balloon large" id="previewBalloon">
                 \(previewBadges)
-                <div class="\(previewBodyClass)" id="previewBody"\(previewBodyStyle)>\(previewContent)</div>
+                <div class="\(previewBodyClass)" id="previewBody"\(previewBodyStyle)>\(formPreviewContent)</div>
                 <div class="preview-knot"></div>
                 \(previewItemNumber)
               </div>
+              <div class="preview-guidance">※ラージ推奨 ( 文字位置 下2% 、画像位置下10% )</div>
               <div class="preview-controls">
                 <div class="preview-side-toggle" aria-label="プレビュー面の切り替え">
                   <button class="button preview-side-button active" type="button" data-preview-side="front">表</button>
@@ -3940,13 +4181,13 @@ final class WebAdminServer {
                 <label>
                   風船カラー
                   <div class="swatches">
-                    \(colorOptions)
+                    \(renderedColorOptions)
                   </div>
                 </label>
                 <label>
                   風船サイズ
                   <div class="segmented three">
-                    \(sizeOptions)
+                    \(renderedSizeOptions)
                   </div>
                 </label>
               </div>
@@ -3983,12 +4224,12 @@ final class WebAdminServer {
                 <div class="font-control">
                   <div class="font-control-head">
                     <span>画像サイズ</span>
-                    <span class="font-size-display" data-image-scale-display></span>
+                    <span class="font-size-display" data-image-scale-display="imageScale"></span>
                   </div>
                   <div class="font-step-row">
-                    <button class="font-step" type="button" data-image-scale-delta="-0.1" aria-label="画像を小さく"><span>-</span></button>
-                    <button class="font-step" type="button" data-image-scale-delta="0.1" aria-label="画像を大きく"><span>+</span></button>
-                    <button class="font-auto" type="button" data-image-scale-auto="true">自動</button>
+                    <button class="font-step" type="button" data-image-scale-target="imageScale" data-image-scale-delta="-0.1" aria-label="画像を小さく"><span>-</span></button>
+                    <button class="font-step" type="button" data-image-scale-target="imageScale" data-image-scale-delta="0.1" aria-label="画像を大きく"><span>+</span></button>
+                    <button class="font-auto" type="button" data-image-scale-target="imageScale" data-image-scale-auto="true">自動</button>
                   </div>
                 </div>
               </div>
@@ -4015,33 +4256,34 @@ final class WebAdminServer {
               </div>
               <div class="back-entry font-controls">
                 <div class="font-control">
+                  <input name="backTextFontSize" type="hidden" value="\(backTextFontSize)">
                   <div class="font-control-head">
                     <span>裏文字サイズ</span>
-                    <span class="font-size-display" data-font-display="textFontSize"></span>
+                    <span class="font-size-display" data-font-display="backTextFontSize"></span>
                   </div>
                   <div class="font-step-row">
-                    <button class="font-step" type="button" data-font-target="textFontSize" data-font-delta="-2" aria-label="裏文字を小さく"><span>-</span></button>
-                    <button class="font-step" type="button" data-font-target="textFontSize" data-font-delta="2" aria-label="裏文字を大きく"><span>+</span></button>
-                    <button class="font-auto" type="button" data-font-target="textFontSize" data-font-auto="true">自動</button>
+                    <button class="font-step" type="button" data-font-target="backTextFontSize" data-font-delta="-2" aria-label="裏文字を小さく"><span>-</span></button>
+                    <button class="font-step" type="button" data-font-target="backTextFontSize" data-font-delta="2" aria-label="裏文字を大きく"><span>+</span></button>
+                    <button class="font-auto" type="button" data-font-target="backTextFontSize" data-font-auto="true">自動</button>
                   </div>
                 </div>
                 <div class="font-control">
                   <div class="font-control-head">
                     <span>裏画像サイズ</span>
-                    <span class="font-size-display" data-image-scale-display></span>
+                    <span class="font-size-display" data-image-scale-display="backImageScale"></span>
                   </div>
                   <div class="font-step-row">
-                    <button class="font-step" type="button" data-image-scale-delta="-0.1" aria-label="裏画像を小さく"><span>-</span></button>
-                    <button class="font-step" type="button" data-image-scale-delta="0.1" aria-label="裏画像を大きく"><span>+</span></button>
-                    <button class="font-auto" type="button" data-image-scale-auto="true">自動</button>
+                    <button class="font-step" type="button" data-image-scale-target="backImageScale" data-image-scale-delta="-0.1" aria-label="裏画像を小さく"><span>-</span></button>
+                    <button class="font-step" type="button" data-image-scale-target="backImageScale" data-image-scale-delta="0.1" aria-label="裏画像を大きく"><span>+</span></button>
+                    <button class="font-auto" type="button" data-image-scale-target="backImageScale" data-image-scale-auto="true">自動</button>
                   </div>
                 </div>
               </div>
               <div class="back-entry position-controls">
-                \(renderPositionControl(title: "裏文字位置", xName: "textOffsetX", yName: "textOffsetY"))
-                \(renderPositionControl(title: "裏画像位置", xName: "imageCaptionOffsetX", yName: "imageCaptionOffsetY"))
+                \(renderPositionControl(title: "裏文字位置", xName: "backTextOffsetX", yName: "backTextOffsetY"))
+                \(renderPositionControl(title: "裏画像位置", xName: "backImageCaptionOffsetX", yName: "backImageCaptionOffsetY"))
               </div>
-              <label class="full speech-entry">
+              <label class="full speech-entry"\(speechEntryStyle)>
                 <span class="speech-entry-head">
                   音声出力枠
                   <button id="testSpeechButton" class="button speech-test-button" type="button">読み上げテスト</button>
@@ -4050,7 +4292,7 @@ final class WebAdminServer {
               </label>
               <label class="full explanation-entry">
                 解説に入れる内容
-                <textarea name="explanationText" placeholder="解説ボタンを押した時に表示する内容">\(activeBalloon.explanationText.htmlEscaped)</textarea>
+                <textarea name="explanationText" placeholder="解説ボタンを押した時に表示する内容">\(formBalloon.explanationText.htmlEscaped)</textarea>
               </label>
               <label class="full explanation-image-field explanation-entry">
                 解説に添付する画像（最大8枚）
@@ -4187,6 +4429,55 @@ final class WebAdminServer {
         }.joined(separator: "\n")
     }
 
+    private func newBalloonDraft() -> BalloonProfile {
+        let color = OverlaySettings.colorOptions.first(where: { $0.name == "レッド" }) ?? OverlaySettings.colorOptions[0]
+        return BalloonProfile(
+            id: UUID(),
+            itemNumber: 0,
+            title: "",
+            text: "裏売値",
+            speechText: "",
+            explanationText: "",
+            explanationImageDataURLs: Array(repeating: "", count: 8),
+            imageName: nil,
+            imageDataURL: nil,
+            backText: "",
+            backImageName: nil,
+            backImageDataURL: nil,
+            textFontSize: 10,
+            imageCaptionFontSize: 0,
+            imageScale: 1.0,
+            textOffsetX: 0,
+            textOffsetY: 0.07,
+            imageCaptionOffsetX: 0,
+            imageCaptionOffsetY: 0.15,
+            backTextFontSize: 16,
+            backImageScale: 1.0,
+            backTextOffsetX: 0,
+            backTextOffsetY: -0.03,
+            backImageCaptionOffsetX: 0,
+            backImageCaptionOffsetY: 0,
+            genreName: "未分類",
+            middleCategoryName: "",
+            smallCategoryName: "",
+            colorName: color.name,
+            colorStartHex: color.startHex,
+            colorEndHex: color.endHex,
+            customBalloonDesignDataURL: nil,
+            customBalloonDesignScale: 1.0,
+            positionName: "ランダム",
+            sizeName: "ラージ",
+            pausesAtMiddle: true,
+            middlePauseDuration: 15.0,
+            isEnabled: true,
+            isFavorite: false,
+            correctCount: 0,
+            incorrectCount: 0,
+            lastReviewedAt: nil,
+            createdAt: Date()
+        )
+    }
+
     private func renderPositionControl(title: String, xName: String, yName: String) -> String {
         """
         <div class="position-control">
@@ -4245,6 +4536,26 @@ final class WebAdminServer {
             smallCategoryFilter: selectedSmallCategoryFilter,
             favoriteFilter: selectedFavoriteFilter
         )
+        let filteredBalloonCount = filteredBalloons(
+            itemNumberSearch: searchValue,
+            genreFilter: selectedGenreFilter,
+            middleCategoryFilter: selectedMiddleCategoryFilter,
+            smallCategoryFilter: selectedSmallCategoryFilter,
+            favoriteFilter: selectedFavoriteFilter
+        ).count
+        let filteredActionItems = listFilterActionItems(
+            itemNumberSearch: searchValue,
+            genreFilter: selectedGenreFilter,
+            middleCategoryFilter: selectedMiddleCategoryFilter,
+            smallCategoryFilter: selectedSmallCategoryFilter,
+            favoriteFilter: selectedFavoriteFilter
+        )
+        let resumeFilteredButton = filteredBalloonCount == 0
+            ? "<span class=\"button disabled-control filtered-start-button\">絞った風船だけ開始</span>"
+            : "<a class=\"button primary filtered-start-button\" href=\"\(listActionPath("/resume-filtered-balloons", items: filteredActionItems, returnTo: listReturnPath))\">絞った風船だけ開始</a>"
+        let stopFilteredButton = filteredBalloonCount == 0
+            ? "<span class=\"button disabled-control filtered-stop-button\">絞った風船を停止</span>"
+            : "<a class=\"button danger filtered-stop-button\" href=\"\(listActionPath("/stop-filtered-balloons", items: filteredActionItems, returnTo: listReturnPath))\">絞った風船を停止</a>"
         let resumeAllButton = settings.balloons.isEmpty
             ? "<span class=\"button disabled-control\">全風船を再開</span>"
             : "<a class=\"button primary\" href=\"\(listActionPath("/resume-all-balloons", returnTo: listReturnPath))\">全風船を再開</a>"
@@ -4303,6 +4614,10 @@ final class WebAdminServer {
             <button type="submit">検索</button>
             <a id="clearListFilters" class="button" href="/?tab=list">クリア</a>
           </form>
+          <div class="filtered-actions">
+            \(resumeFilteredButton)
+            \(stopFilteredButton)
+          </div>
           \(renderBalloonList(
             itemNumberSearch: searchValue,
             listSort: selectedSort,
@@ -4344,6 +4659,32 @@ final class WebAdminServer {
             items.append(URLQueryItem(name: "listFavoriteFilter", value: favoriteFilter))
         }
         return appendingQueryItems(to: "/", items: items)
+    }
+
+    private func listFilterActionItems(
+        itemNumberSearch: String,
+        genreFilter: String,
+        middleCategoryFilter: String,
+        smallCategoryFilter: String,
+        favoriteFilter: String
+    ) -> [URLQueryItem] {
+        var items: [URLQueryItem] = []
+        if !itemNumberSearch.isEmpty {
+            items.append(URLQueryItem(name: "itemNumberSearch", value: itemNumberSearch))
+        }
+        if !genreFilter.isEmpty {
+            items.append(URLQueryItem(name: "listGenreFilter", value: genreFilter))
+        }
+        if !middleCategoryFilter.isEmpty {
+            items.append(URLQueryItem(name: "listMiddleCategoryFilter", value: middleCategoryFilter))
+        }
+        if !smallCategoryFilter.isEmpty {
+            items.append(URLQueryItem(name: "listSmallCategoryFilter", value: smallCategoryFilter))
+        }
+        if !favoriteFilter.isEmpty {
+            items.append(URLQueryItem(name: "listFavoriteFilter", value: favoriteFilter))
+        }
+        return items
     }
 
     private func listActionPath(_ path: String, items: [URLQueryItem] = [], returnTo: String) -> String {
@@ -4493,6 +4834,10 @@ final class WebAdminServer {
             return "全商品停止前の状態に戻しました"
         case "allResumed":
             return "全風船を再開しました"
+        case "filteredResumed":
+            return "絞り込み中の風船だけ稼働にしました"
+        case "filteredStopped":
+            return "絞り込み中の風船を停止しました"
         case "genreStopped":
             return "大カテゴリ内の商品を停止しました"
         case "genreRestored":

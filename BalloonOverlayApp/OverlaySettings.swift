@@ -20,6 +20,12 @@ struct BalloonProfile: Codable, Identifiable {
     var textOffsetY: Double
     var imageCaptionOffsetX: Double
     var imageCaptionOffsetY: Double
+    var backTextFontSize: Double
+    var backImageScale: Double
+    var backTextOffsetX: Double
+    var backTextOffsetY: Double
+    var backImageCaptionOffsetX: Double
+    var backImageCaptionOffsetY: Double
     var genreName: String
     var middleCategoryName: String
     var smallCategoryName: String
@@ -59,6 +65,12 @@ struct BalloonProfile: Codable, Identifiable {
         textOffsetY: Double,
         imageCaptionOffsetX: Double,
         imageCaptionOffsetY: Double,
+        backTextFontSize: Double,
+        backImageScale: Double,
+        backTextOffsetX: Double,
+        backTextOffsetY: Double,
+        backImageCaptionOffsetX: Double,
+        backImageCaptionOffsetY: Double,
         genreName: String,
         middleCategoryName: String,
         smallCategoryName: String,
@@ -97,6 +109,12 @@ struct BalloonProfile: Codable, Identifiable {
         self.textOffsetY = textOffsetY
         self.imageCaptionOffsetX = imageCaptionOffsetX
         self.imageCaptionOffsetY = imageCaptionOffsetY
+        self.backTextFontSize = backTextFontSize
+        self.backImageScale = backImageScale
+        self.backTextOffsetX = backTextOffsetX
+        self.backTextOffsetY = backTextOffsetY
+        self.backImageCaptionOffsetX = backImageCaptionOffsetX
+        self.backImageCaptionOffsetY = backImageCaptionOffsetY
         self.genreName = genreName
         self.middleCategoryName = middleCategoryName
         self.smallCategoryName = smallCategoryName
@@ -138,6 +156,12 @@ struct BalloonProfile: Codable, Identifiable {
         textOffsetY = try container.decodeIfPresent(Double.self, forKey: .textOffsetY) ?? 0
         imageCaptionOffsetX = try container.decodeIfPresent(Double.self, forKey: .imageCaptionOffsetX) ?? 0
         imageCaptionOffsetY = try container.decodeIfPresent(Double.self, forKey: .imageCaptionOffsetY) ?? 0
+        backTextFontSize = try container.decodeIfPresent(Double.self, forKey: .backTextFontSize) ?? textFontSize
+        backImageScale = try container.decodeIfPresent(Double.self, forKey: .backImageScale) ?? imageScale
+        backTextOffsetX = try container.decodeIfPresent(Double.self, forKey: .backTextOffsetX) ?? textOffsetX
+        backTextOffsetY = try container.decodeIfPresent(Double.self, forKey: .backTextOffsetY) ?? textOffsetY
+        backImageCaptionOffsetX = try container.decodeIfPresent(Double.self, forKey: .backImageCaptionOffsetX) ?? imageCaptionOffsetX
+        backImageCaptionOffsetY = try container.decodeIfPresent(Double.self, forKey: .backImageCaptionOffsetY) ?? imageCaptionOffsetY
         genreName = try container.decodeIfPresent(String.self, forKey: .genreName) ?? "未分類"
         middleCategoryName = try container.decodeIfPresent(String.self, forKey: .middleCategoryName) ?? ""
         smallCategoryName = try container.decodeIfPresent(String.self, forKey: .smallCategoryName) ?? ""
@@ -220,6 +244,7 @@ final class OverlaySettings {
     var randomIntervalMaxSeconds: TimeInterval
     var climbSpeed: Double
     var launchPositionName: String
+    var isSpeechOutputEnabled: Bool
     var balloons: [BalloonProfile]
     var activeBalloonID: UUID?
     var isPaused: Bool
@@ -265,6 +290,9 @@ final class OverlaySettings {
         randomIntervalMaxSeconds = defaults.double(forKey: Keys.randomIntervalMaxSeconds)
         climbSpeed = defaults.double(forKey: Keys.climbSpeed)
         launchPositionName = defaults.string(forKey: Keys.launchPositionName) ?? "ランダム"
+        isSpeechOutputEnabled = defaults.object(forKey: Keys.isSpeechOutputEnabled) == nil
+            ? true
+            : defaults.bool(forKey: Keys.isSpeechOutputEnabled)
         activeBalloonID = defaults.string(forKey: Keys.activeBalloonID).flatMap(UUID.init(uuidString:))
         isPaused = defaults.bool(forKey: Keys.isPaused)
         allStopSnapshotEnabledIDs = Set(
@@ -319,11 +347,14 @@ final class OverlaySettings {
         updateLaunchSettings(positionName: positionName, climbSpeed: climbSpeed)
     }
 
-    func updateLaunchSettings(positionName: String, climbSpeed: Double) {
+    func updateLaunchSettings(positionName: String, climbSpeed: Double, isSpeechOutputEnabled: Bool? = nil) {
         let trimmedPositionName = positionName.trimmingCharacters(in: .whitespacesAndNewlines)
         let position = Self.positionOptions.first(where: { $0.name == trimmedPositionName }) ?? Self.positionOptions[3]
         launchPositionName = position.name
         self.climbSpeed = min(max(climbSpeed, 40), 900)
+        if let isSpeechOutputEnabled {
+            self.isSpeechOutputEnabled = isSpeechOutputEnabled
+        }
         save()
     }
 
@@ -365,6 +396,12 @@ final class OverlaySettings {
             textOffsetY: 0,
             imageCaptionOffsetX: 0,
             imageCaptionOffsetY: 0,
+            backTextFontSize: 0,
+            backImageScale: 1.0,
+            backTextOffsetX: 0,
+            backTextOffsetY: 0,
+            backImageCaptionOffsetX: 0,
+            backImageCaptionOffsetY: 0,
             genreName: "Codex通知",
             middleCategoryName: "",
             smallCategoryName: "",
@@ -412,6 +449,12 @@ final class OverlaySettings {
         textOffsetY: Double,
         imageCaptionOffsetX: Double,
         imageCaptionOffsetY: Double,
+        backTextFontSize: Double,
+        backImageScale: Double,
+        backTextOffsetX: Double,
+        backTextOffsetY: Double,
+        backImageCaptionOffsetX: Double,
+        backImageCaptionOffsetY: Double,
         genreName: String,
         middleCategoryName: String,
         smallCategoryName: String,
@@ -451,6 +494,12 @@ final class OverlaySettings {
         let clampedTextOffsetY = Self.clampedPositionOffset(textOffsetY)
         let clampedImageCaptionOffsetX = Self.clampedPositionOffset(imageCaptionOffsetX)
         let clampedImageCaptionOffsetY = Self.clampedPositionOffset(imageCaptionOffsetY)
+        let clampedBackTextFontSize = Self.clampedFontSize(backTextFontSize)
+        let clampedBackImageScale = Self.clampedImageScale(backImageScale)
+        let clampedBackTextOffsetX = Self.clampedPositionOffset(backTextOffsetX)
+        let clampedBackTextOffsetY = Self.clampedPositionOffset(backTextOffsetY)
+        let clampedBackImageCaptionOffsetX = Self.clampedPositionOffset(backImageCaptionOffsetX)
+        let clampedBackImageCaptionOffsetY = Self.clampedPositionOffset(backImageCaptionOffsetY)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
 
         let balloon = BalloonProfile(
@@ -473,6 +522,12 @@ final class OverlaySettings {
             textOffsetY: clampedTextOffsetY,
             imageCaptionOffsetX: clampedImageCaptionOffsetX,
             imageCaptionOffsetY: clampedImageCaptionOffsetY,
+            backTextFontSize: clampedBackTextFontSize,
+            backImageScale: clampedBackImageScale,
+            backTextOffsetX: clampedBackTextOffsetX,
+            backTextOffsetY: clampedBackTextOffsetY,
+            backImageCaptionOffsetX: clampedBackImageCaptionOffsetX,
+            backImageCaptionOffsetY: clampedBackImageCaptionOffsetY,
             genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
             middleCategoryName: trimmedMiddleCategoryName,
             smallCategoryName: trimmedSmallCategoryName,
@@ -517,6 +572,12 @@ final class OverlaySettings {
         textOffsetY: Double,
         imageCaptionOffsetX: Double,
         imageCaptionOffsetY: Double,
+        backTextFontSize: Double,
+        backImageScale: Double,
+        backTextOffsetX: Double,
+        backTextOffsetY: Double,
+        backImageCaptionOffsetX: Double,
+        backImageCaptionOffsetY: Double,
         genreName: String,
         middleCategoryName: String,
         smallCategoryName: String,
@@ -558,6 +619,12 @@ final class OverlaySettings {
         let clampedTextOffsetY = Self.clampedPositionOffset(textOffsetY)
         let clampedImageCaptionOffsetX = Self.clampedPositionOffset(imageCaptionOffsetX)
         let clampedImageCaptionOffsetY = Self.clampedPositionOffset(imageCaptionOffsetY)
+        let clampedBackTextFontSize = Self.clampedFontSize(backTextFontSize)
+        let clampedBackImageScale = Self.clampedImageScale(backImageScale)
+        let clampedBackTextOffsetX = Self.clampedPositionOffset(backTextOffsetX)
+        let clampedBackTextOffsetY = Self.clampedPositionOffset(backTextOffsetY)
+        let clampedBackImageCaptionOffsetX = Self.clampedPositionOffset(backImageCaptionOffsetX)
+        let clampedBackImageCaptionOffsetY = Self.clampedPositionOffset(backImageCaptionOffsetY)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
         let createdAt = balloons[index].createdAt
         let isEnabled = balloons[index].isEnabled
@@ -587,6 +654,12 @@ final class OverlaySettings {
             textOffsetY: clampedTextOffsetY,
             imageCaptionOffsetX: clampedImageCaptionOffsetX,
             imageCaptionOffsetY: clampedImageCaptionOffsetY,
+            backTextFontSize: clampedBackTextFontSize,
+            backImageScale: clampedBackImageScale,
+            backTextOffsetX: clampedBackTextOffsetX,
+            backTextOffsetY: clampedBackTextOffsetY,
+            backImageCaptionOffsetX: clampedBackImageCaptionOffsetX,
+            backImageCaptionOffsetY: clampedBackImageCaptionOffsetY,
             genreName: trimmedGenreName.isEmpty ? "未分類" : trimmedGenreName,
             middleCategoryName: trimmedMiddleCategoryName,
             smallCategoryName: trimmedSmallCategoryName,
@@ -721,6 +794,42 @@ final class OverlaySettings {
         }
 
         activeBalloonID = isEnabled ? balloons.last?.id : nil
+        save()
+    }
+
+    func setOnlyBalloonsEnabled(ids enabledIDs: Set<UUID>) {
+        guard !balloons.isEmpty else { return }
+
+        allStopSnapshotEnabledIDs.removeAll()
+        saveAllStopSnapshot()
+
+        for index in balloons.indices {
+            balloons[index].isEnabled = enabledIDs.contains(balloons[index].id)
+        }
+
+        activeBalloonID = enabledBalloons.last?.id
+        save()
+    }
+
+    func setBalloonsEnabled(ids targetIDs: Set<UUID>, isEnabled: Bool) {
+        guard !targetIDs.isEmpty else { return }
+        var changedIDs: [UUID] = []
+
+        for index in balloons.indices {
+            guard targetIDs.contains(balloons[index].id) else { continue }
+
+            balloons[index].isEnabled = isEnabled
+            changedIDs.append(balloons[index].id)
+        }
+
+        guard !changedIDs.isEmpty else { return }
+
+        if isEnabled {
+            activeBalloonID = changedIDs.last
+        } else if let activeBalloonID, changedIDs.contains(activeBalloonID) {
+            self.activeBalloonID = enabledBalloons.last?.id
+        }
+
         save()
     }
 
@@ -967,6 +1076,7 @@ final class OverlaySettings {
         defaults.set(randomIntervalMaxSeconds, forKey: Keys.randomIntervalMaxSeconds)
         defaults.set(climbSpeed, forKey: Keys.climbSpeed)
         defaults.set(launchPositionName, forKey: Keys.launchPositionName)
+        defaults.set(isSpeechOutputEnabled, forKey: Keys.isSpeechOutputEnabled)
         defaults.set(activeBalloonID?.uuidString, forKey: Keys.activeBalloonID)
 
         if let encoded = try? JSONEncoder().encode(balloons) {
@@ -1051,6 +1161,12 @@ final class OverlaySettings {
             textOffsetY: 0,
             imageCaptionOffsetX: 0,
             imageCaptionOffsetY: 0,
+            backTextFontSize: 0,
+            backImageScale: 1.0,
+            backTextOffsetX: 0,
+            backTextOffsetY: 0,
+            backImageCaptionOffsetX: 0,
+            backImageCaptionOffsetY: 0,
             genreName: "未分類",
             middleCategoryName: "",
             smallCategoryName: "",
@@ -1142,6 +1258,12 @@ final class OverlaySettings {
             textOffsetY: 0,
             imageCaptionOffsetX: 0,
             imageCaptionOffsetY: 0,
+            backTextFontSize: 0,
+            backImageScale: 1.0,
+            backTextOffsetX: 0,
+            backTextOffsetY: 0,
+            backImageCaptionOffsetX: 0,
+            backImageCaptionOffsetY: 0,
             genreName: "未分類",
             middleCategoryName: "",
             smallCategoryName: "",
@@ -1203,6 +1325,7 @@ private enum Keys {
     static let randomIntervalMaxSeconds = "randomIntervalMaxSeconds"
     static let climbSpeed = "climbSpeed"
     static let launchPositionName = "launchPositionName"
+    static let isSpeechOutputEnabled = "isSpeechOutputEnabled"
     static let balloons = "balloons"
     static let activeBalloonID = "activeBalloonID"
     static let isPaused = "isPaused"
