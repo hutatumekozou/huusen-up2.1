@@ -40,6 +40,7 @@ struct BalloonProfile: Codable, Identifiable {
     var middlePauseDuration: Double
     var isEnabled: Bool
     var isFavorite: Bool
+    var favoriteLevel: Int
     var correctCount: Int
     var incorrectCount: Int
     var lastReviewedAt: Date?
@@ -85,6 +86,7 @@ struct BalloonProfile: Codable, Identifiable {
         middlePauseDuration: Double,
         isEnabled: Bool,
         isFavorite: Bool,
+        favoriteLevel: Int? = nil,
         correctCount: Int,
         incorrectCount: Int,
         lastReviewedAt: Date?,
@@ -128,7 +130,8 @@ struct BalloonProfile: Codable, Identifiable {
         self.pausesAtMiddle = pausesAtMiddle
         self.middlePauseDuration = middlePauseDuration
         self.isEnabled = isEnabled
-        self.isFavorite = isFavorite
+        self.favoriteLevel = Self.clampedFavoriteLevel(favoriteLevel ?? (isFavorite ? 1 : 0))
+        self.isFavorite = self.favoriteLevel > 0
         self.correctCount = correctCount
         self.incorrectCount = incorrectCount
         self.lastReviewedAt = lastReviewedAt
@@ -182,11 +185,17 @@ struct BalloonProfile: Codable, Identifiable {
         pausesAtMiddle = try container.decodeIfPresent(Bool.self, forKey: .pausesAtMiddle) ?? false
         middlePauseDuration = try container.decodeIfPresent(Double.self, forKey: .middlePauseDuration) ?? 1.0
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
-        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        let decodedIsFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        favoriteLevel = Self.clampedFavoriteLevel(try container.decodeIfPresent(Int.self, forKey: .favoriteLevel) ?? (decodedIsFavorite ? 1 : 0))
+        isFavorite = favoriteLevel > 0
         correctCount = try container.decodeIfPresent(Int.self, forKey: .correctCount) ?? 0
         incorrectCount = try container.decodeIfPresent(Int.self, forKey: .incorrectCount) ?? 0
         lastReviewedAt = try container.decodeIfPresent(Date.self, forKey: .lastReviewedAt)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
+
+    static func clampedFavoriteLevel(_ value: Int) -> Int {
+        min(max(value, 0), 2)
     }
 }
 
@@ -628,7 +637,7 @@ final class OverlaySettings {
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
         let createdAt = balloons[index].createdAt
         let isEnabled = balloons[index].isEnabled
-        let isFavorite = balloons[index].isFavorite
+        let favoriteLevel = balloons[index].favoriteLevel
         let correctCount = balloons[index].correctCount
         let incorrectCount = balloons[index].incorrectCount
         let itemNumber = balloons[index].itemNumber
@@ -673,7 +682,8 @@ final class OverlaySettings {
             pausesAtMiddle: pausesAtMiddle,
             middlePauseDuration: clampedPauseDuration,
             isEnabled: isEnabled,
-            isFavorite: isFavorite,
+            isFavorite: favoriteLevel > 0,
+            favoriteLevel: favoriteLevel,
             correctCount: correctCount,
             incorrectCount: incorrectCount,
             lastReviewedAt: lastReviewedAt,
@@ -773,8 +783,14 @@ final class OverlaySettings {
     }
 
     func setBalloonFavorite(id: UUID, isFavorite: Bool) {
+        setBalloonFavoriteLevel(id: id, favoriteLevel: isFavorite ? 1 : 0)
+    }
+
+    func setBalloonFavoriteLevel(id: UUID, favoriteLevel: Int) {
         guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
-        balloons[index].isFavorite = isFavorite
+        let clampedLevel = BalloonProfile.clampedFavoriteLevel(favoriteLevel)
+        balloons[index].favoriteLevel = clampedLevel
+        balloons[index].isFavorite = clampedLevel > 0
         save()
     }
 

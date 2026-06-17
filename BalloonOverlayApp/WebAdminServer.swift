@@ -242,9 +242,10 @@ final class WebAdminServer {
             return redirect(to: listActionRedirectPath(from: path.query, message: "updated"))
         case "/toggle-favorite":
             if let id = path.query["id"].flatMap(UUID.init(uuidString:)) {
-                let isFavorite = path.query["favorite"] == "1"
+                let favoriteLevel = path.query["favoriteLevel"].flatMap(Int.init)
+                    ?? (path.query["favorite"] == "1" ? 1 : 0)
                 DispatchQueue.main.async {
-                    self.settings.setBalloonFavorite(id: id, isFavorite: isFavorite)
+                    self.settings.setBalloonFavoriteLevel(id: id, favoriteLevel: favoriteLevel)
                     self.settingsChanged()
                 }
             }
@@ -2154,8 +2155,8 @@ final class WebAdminServer {
               color: #5f6368;
             }
             .favorite-button {
-              width: 42px;
-              min-width: 42px;
+              width: 48px;
+              min-width: 48px;
               height: 36px;
               padding: 0;
               display: inline-flex;
@@ -2170,6 +2171,10 @@ final class WebAdminServer {
               color: #fff;
               border-color: #111;
               background: #111;
+            }
+            .favorite-button.level-two {
+              font-size: 18px;
+              font-weight: 800;
             }
             .item-meta {
               color: #5f6368;
@@ -2207,6 +2212,12 @@ final class WebAdminServer {
               white-space: nowrap;
               padding: 0 8px;
               box-sizing: border-box;
+            }
+            .list-filter .search-button {
+              background: #ffd84d;
+              border-color: #f2a900;
+              color: #1d1d1f;
+              font-weight: 800;
             }
             .filtered-actions {
               display: flex;
@@ -2501,6 +2512,8 @@ final class WebAdminServer {
             const listReturnStorageKey = "balloonOverlayLastListReturnPath";
             const listScrollStorageKey = "balloonOverlayLastListScrollY";
             const queryParams = new URLSearchParams(window.location.search);
+            const listFilterForm = document.querySelector(".list-filter");
+            const listFilterQueryNames = ["itemNumberSearch", "listGenreFilter", "listMiddleCategoryFilter", "listSmallCategoryFilter", "listSort", "listFavoriteFilter"];
 
             function sanitizedPathFromLocation() {
               const url = new URL(window.location.href);
@@ -2508,6 +2521,49 @@ final class WebAdminServer {
                 url.searchParams.delete(name);
               });
               return `${url.pathname}${url.search}`;
+            }
+
+            function listFilterPathFromForm() {
+              if (!listFilterForm) return sanitizedPathFromLocation();
+
+              const params = new URLSearchParams();
+              params.set("tab", "list");
+              listFilterQueryNames.forEach((name) => {
+                const field = listFilterForm.elements[name];
+                const rawValue = field?.value || "";
+                const value = name === "itemNumberSearch" ? rawValue.trim() : rawValue;
+                if (value) params.set(name, value);
+              });
+              return `/?${params.toString()}`;
+            }
+
+            function currentListPath() {
+              if (new URL(window.location.href).searchParams.get("tab") === "list" && listFilterForm) {
+                return listFilterPathFromForm();
+              }
+              return sanitizedPathFromLocation();
+            }
+
+            function applyCurrentListFiltersToAction(url) {
+              const currentListUrl = new URL(listFilterPathFromForm(), window.location.origin);
+              listFilterQueryNames.forEach((name) => {
+                url.searchParams.delete(name);
+                const value = currentListUrl.searchParams.get(name);
+                if (value) url.searchParams.set(name, value);
+              });
+            }
+
+            function refreshListActionHref(link) {
+              if (!link?.href) return;
+
+              const url = new URL(link.getAttribute("href") || link.href, window.location.origin);
+              if (url.pathname === "/resume-filtered-balloons" || url.pathname === "/stop-filtered-balloons") {
+                applyCurrentListFiltersToAction(url);
+              }
+              if (url.searchParams.has("returnTo")) {
+                url.searchParams.set("returnTo", currentReturnPath());
+              }
+              link.href = `${url.pathname}${url.search}${url.hash}`;
             }
 
             function hasListState(path) {
@@ -2528,7 +2584,7 @@ final class WebAdminServer {
             }
 
             function currentReturnPath() {
-              const path = sanitizedPathFromLocation();
+              const path = currentListPath();
               if (new URL(path, window.location.origin).searchParams.get("tab") === "list") {
                 sessionStorage.setItem(listReturnStorageKey, path);
                 return path;
@@ -2551,6 +2607,17 @@ final class WebAdminServer {
               }
             }
 
+            listFilterForm?.addEventListener("submit", (event) => {
+              event.preventDefault();
+              const path = listFilterPathFromForm();
+              sessionStorage.setItem(listReturnStorageKey, path);
+              window.location.assign(path);
+            });
+
+            document.querySelectorAll('a[href*="returnTo="]').forEach((link) => {
+              link.addEventListener("click", () => refreshListActionHref(link));
+            });
+
             const restoreScrollY = queryParams.get("restoreScrollY");
             if (restoreScrollY !== null) {
               requestAnimationFrame(() => {
@@ -2572,14 +2639,17 @@ final class WebAdminServer {
               });
             });
 
-            function applyFavoriteButtonState(button, isFavorite) {
-              button.dataset.favorite = isFavorite ? "1" : "0";
-              button.classList.toggle("active", isFavorite);
-              button.textContent = isFavorite ? "⭐️" : "☆";
-              button.title = isFavorite ? "お気に入り解除" : "お気に入り";
+            function applyFavoriteButtonState(button, favoriteLevel) {
+              const level = Math.min(2, Math.max(0, Number(favoriteLevel) || 0));
+              const nextLevel = level >= 2 ? 0 : level + 1;
+              button.dataset.favorite = String(level);
+              button.classList.toggle("active", level > 0);
+              button.classList.toggle("level-two", level === 2);
+              button.textContent = level === 0 ? "☆" : level === 1 ? "★" : "★2";
+              button.title = level === 0 ? "お気に入り" : level === 1 ? "お気に入り2へ" : "お気に入り解除";
               const id = button.dataset.id;
               if (id) {
-                button.href = `/toggle-favorite?id=${encodeURIComponent(id)}&favorite=${isFavorite ? "0" : "1"}`;
+                button.href = `/toggle-favorite?id=${encodeURIComponent(id)}&favoriteLevel=${nextLevel}`;
               }
             }
 
@@ -2590,13 +2660,13 @@ final class WebAdminServer {
                 const id = button.dataset.id;
                 if (!id || button.dataset.loading === "1") return;
 
-                const wasFavorite = button.dataset.favorite === "1";
-                const nextFavorite = !wasFavorite;
+                const wasFavorite = Math.min(2, Math.max(0, Number(button.dataset.favorite) || 0));
+                const nextFavorite = wasFavorite >= 2 ? 0 : wasFavorite + 1;
                 button.dataset.loading = "1";
                 applyFavoriteButtonState(button, nextFavorite);
 
                 try {
-                  const response = await fetch(`/toggle-favorite?id=${encodeURIComponent(id)}&favorite=${nextFavorite ? "1" : "0"}`, {
+                  const response = await fetch(`/toggle-favorite?id=${encodeURIComponent(id)}&favoriteLevel=${nextFavorite}`, {
                     method: "POST"
                   });
                   if (!response.ok) throw new Error("favorite update failed");
@@ -4611,7 +4681,7 @@ final class WebAdminServer {
                 \(favoriteOptions)
               </select>
             </label>
-            <button type="submit">検索</button>
+            <button class="search-button" type="submit">検索</button>
             <a id="clearListFilters" class="button" href="/?tab=list">クリア</a>
           </form>
           <div class="filtered-actions">
@@ -4698,7 +4768,12 @@ final class WebAdminServer {
     }
 
     private func normalizedFavoriteFilter(_ value: String?) -> String {
-        value == "favorite" ? "favorite" : ""
+        switch value {
+        case "favorite", "favorite1", "favorite2":
+            return value ?? ""
+        default:
+            return ""
+        }
     }
 
     private func normalizedListSort(_ value: String?) -> String {
@@ -4724,7 +4799,8 @@ final class WebAdminServer {
     private func renderFavoriteFilterOptions(selectedFavoriteFilter: String) -> String {
         [
             ("", "すべて"),
-            ("favorite", "お気に入りのみ")
+            ("favorite1", "★1"),
+            ("favorite2", "★2")
         ].map { value, label in
             let selected = value == selectedFavoriteFilter ? " selected" : ""
             return "<option value=\"\(value)\"\(selected)>\(label)</option>"
@@ -5277,7 +5353,18 @@ final class WebAdminServer {
             let matchesGenre = normalizedGenreFilter.isEmpty || genreName == normalizedGenreFilter
             let matchesMiddleCategory = normalizedMiddleCategoryFilter.isEmpty || middleCategoryName == normalizedMiddleCategoryFilter
             let matchesSmallCategory = normalizedSmallCategoryFilter.isEmpty || smallCategoryName == normalizedSmallCategoryFilter
-            let matchesFavorite = favoriteFilter != "favorite" || balloon.isFavorite
+            let favoriteLevel = BalloonProfile.clampedFavoriteLevel(balloon.favoriteLevel)
+            let matchesFavorite: Bool
+            switch favoriteFilter {
+            case "favorite":
+                matchesFavorite = favoriteLevel > 0
+            case "favorite1":
+                matchesFavorite = favoriteLevel == 1
+            case "favorite2":
+                matchesFavorite = favoriteLevel == 2
+            default:
+                matchesFavorite = true
+            }
 
             return matchesKeyword && matchesGenre && matchesMiddleCategory && matchesSmallCategory && matchesFavorite
         }
@@ -5476,11 +5563,24 @@ final class WebAdminServer {
         let activeMark = settings.activeBalloonID == balloon.id ? " / 表示対象" : ""
         let enabledTitle = balloon.isEnabled ? "稼働OFF" : "稼働ON"
         let enabledValue = balloon.isEnabled ? "0" : "1"
-        let favoriteTitle = balloon.isFavorite ? "お気に入り解除" : "お気に入り"
-        let favoriteValue = balloon.isFavorite ? "0" : "1"
-        let favoriteClass = balloon.isFavorite ? "button favorite-button active" : "button favorite-button"
-        let favoriteSymbol = balloon.isFavorite ? "⭐️" : "☆"
-        let favoriteState = balloon.isFavorite ? "1" : "0"
+        let favoriteLevel = BalloonProfile.clampedFavoriteLevel(balloon.favoriteLevel)
+        let nextFavoriteLevel = favoriteLevel >= 2 ? 0 : favoriteLevel + 1
+        let favoriteTitle: String
+        let favoriteSymbol: String
+        switch favoriteLevel {
+        case 1:
+            favoriteTitle = "お気に入り2へ"
+            favoriteSymbol = "★"
+        case 2:
+            favoriteTitle = "お気に入り解除"
+            favoriteSymbol = "★2"
+        default:
+            favoriteTitle = "お気に入り"
+            favoriteSymbol = "☆"
+        }
+        let favoriteClass = favoriteLevel > 0
+            ? "button favorite-button active\(favoriteLevel == 2 ? " level-two" : "")"
+            : "button favorite-button"
         let itemClass = balloon.isEnabled ? "item enabled" : "item disabled"
         let statusClass = balloon.isEnabled ? "item-status" : "item-status off"
         let statusTitle = balloon.isEnabled ? "稼働中" : "停止中"
@@ -5497,7 +5597,7 @@ final class WebAdminServer {
         ], returnTo: listReturnPath)
         let favoriteHref = listActionPath("/toggle-favorite", items: [
             idItem,
-            URLQueryItem(name: "favorite", value: favoriteValue)
+            URLQueryItem(name: "favoriteLevel", value: String(nextFavoriteLevel))
         ], returnTo: listReturnPath)
         let deleteHref = listActionPath("/delete", items: [idItem], returnTo: listReturnPath)
         let showButton = "<a class=\"button primary\" href=\"\(showHref.htmlEscaped)\" data-show-button=\"true\" data-id=\"\(balloon.id.uuidString)\">表示</a>"
@@ -5516,7 +5616,7 @@ final class WebAdminServer {
             <a class="button" href="\(toggleHref.htmlEscaped)">\(enabledTitle)</a>
             \(showButton)
             <a class="button" href="\(editHref.htmlEscaped)" data-edit-button="true">編集</a>
-            <a class="\(favoriteClass)" href="\(favoriteHref.htmlEscaped)" title="\(favoriteTitle)" data-favorite-button="true" data-id="\(balloon.id.uuidString)" data-favorite="\(favoriteState)">\(favoriteSymbol)</a>
+            <a class="\(favoriteClass)" href="\(favoriteHref.htmlEscaped)" title="\(favoriteTitle)" data-favorite-button="true" data-id="\(balloon.id.uuidString)" data-favorite="\(favoriteLevel)">\(favoriteSymbol)</a>
             <a class="button" href="\(deleteHref.htmlEscaped)" onclick="return confirm('本当に削除しますか？');">削除</a>
           </div>
         </div>
