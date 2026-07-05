@@ -252,8 +252,10 @@ final class OverlaySettings {
     var randomIntervalMinSeconds: TimeInterval
     var randomIntervalMaxSeconds: TimeInterval
     var climbSpeed: Double
+    var launchMiddlePauseDuration: Double
     var launchPositionName: String
     var isSpeechOutputEnabled: Bool
+    var speechVolume: Double
     var balloons: [BalloonProfile]
     var activeBalloonID: UUID?
     var isPaused: Bool
@@ -298,10 +300,16 @@ final class OverlaySettings {
         randomIntervalMinSeconds = defaults.double(forKey: Keys.randomIntervalMinSeconds)
         randomIntervalMaxSeconds = defaults.double(forKey: Keys.randomIntervalMaxSeconds)
         climbSpeed = defaults.double(forKey: Keys.climbSpeed)
+        launchMiddlePauseDuration = defaults.object(forKey: Keys.launchMiddlePauseDuration) == nil
+            ? 15.0
+            : defaults.double(forKey: Keys.launchMiddlePauseDuration)
         launchPositionName = defaults.string(forKey: Keys.launchPositionName) ?? "ランダム"
         isSpeechOutputEnabled = defaults.object(forKey: Keys.isSpeechOutputEnabled) == nil
             ? true
             : defaults.bool(forKey: Keys.isSpeechOutputEnabled)
+        speechVolume = defaults.object(forKey: Keys.speechVolume) == nil
+            ? 1.0
+            : defaults.double(forKey: Keys.speechVolume)
         activeBalloonID = defaults.string(forKey: Keys.activeBalloonID).flatMap(UUID.init(uuidString:))
         isPaused = defaults.bool(forKey: Keys.isPaused)
         allStopSnapshotEnabledIDs = Set(
@@ -328,6 +336,8 @@ final class OverlaySettings {
         if defaults.object(forKey: Keys.climbSpeed) == nil || climbSpeed <= 0 || climbSpeed == 300 || climbSpeed == 350 {
             climbSpeed = 400
         }
+        launchMiddlePauseDuration = Self.clampedMiddlePauseDuration(launchMiddlePauseDuration)
+        speechVolume = Self.clampedSpeechVolume(speechVolume)
         if !Self.positionOptions.contains(where: { $0.name == launchPositionName }) {
             launchPositionName = "ランダム"
         }
@@ -343,7 +353,7 @@ final class OverlaySettings {
         randomIntervalMaxSeconds: Double,
         climbSpeed: Double
     ) {
-        displayInterval = max(intervalMinutes, 0.1) * 60
+        displayInterval = max(intervalMinutes * 60, 1)
         let minSeconds = max(randomIntervalMinSeconds, 1)
         let maxSeconds = max(randomIntervalMaxSeconds, minSeconds)
         self.randomIntervalMinSeconds = minSeconds
@@ -356,24 +366,35 @@ final class OverlaySettings {
         updateLaunchSettings(positionName: positionName, climbSpeed: climbSpeed)
     }
 
-    func updateLaunchSettings(positionName: String, climbSpeed: Double, isSpeechOutputEnabled: Bool? = nil) {
+    func updateLaunchSettings(
+        positionName: String,
+        climbSpeed: Double,
+        intervalSeconds: Double? = nil,
+        middlePauseDuration: Double? = nil,
+        isSpeechOutputEnabled: Bool? = nil,
+        speechVolume: Double? = nil
+    ) {
         let trimmedPositionName = positionName.trimmingCharacters(in: .whitespacesAndNewlines)
         let position = Self.positionOptions.first(where: { $0.name == trimmedPositionName }) ?? Self.positionOptions[3]
         launchPositionName = position.name
         self.climbSpeed = min(max(climbSpeed, 40), 900)
+        if let intervalSeconds {
+            displayInterval = max(intervalSeconds, 1)
+        }
+        if let middlePauseDuration {
+            launchMiddlePauseDuration = Self.clampedMiddlePauseDuration(middlePauseDuration)
+        }
         if let isSpeechOutputEnabled {
             self.isSpeechOutputEnabled = isSpeechOutputEnabled
+        }
+        if let speechVolume {
+            self.speechVolume = Self.clampedSpeechVolume(speechVolume)
         }
         save()
     }
 
     func nextDisplayInterval() -> TimeInterval {
-        let enabledCount = max(enabledBalloons.count, 1)
-        let minSeconds = max(randomIntervalMinSeconds, 1)
-        let maxSecondsForOneCycle = max(randomIntervalMaxSeconds, minSeconds)
-        let maxSecondsPerBalloon = max(minSeconds, maxSecondsForOneCycle / Double(enabledCount))
-
-        return TimeInterval.random(in: minSeconds...maxSecondsPerBalloon)
+        max(displayInterval, 1)
     }
 
     func presentCodexCompletionBalloon(title: String, message: String, details: String, isSuccess: Bool) {
@@ -472,6 +493,7 @@ final class OverlaySettings {
         customBalloonDesignScale: Double,
         positionName: String,
         sizeName: String,
+        favoriteLevel: Int,
         pausesAtMiddle: Bool,
         middlePauseDuration: Double
     ) {
@@ -510,6 +532,7 @@ final class OverlaySettings {
         let clampedBackImageCaptionOffsetX = Self.clampedPositionOffset(backImageCaptionOffsetX)
         let clampedBackImageCaptionOffsetY = Self.clampedPositionOffset(backImageCaptionOffsetY)
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
+        let clampedFavoriteLevel = BalloonProfile.clampedFavoriteLevel(favoriteLevel)
 
         let balloon = BalloonProfile(
             id: UUID(),
@@ -550,7 +573,8 @@ final class OverlaySettings {
             pausesAtMiddle: pausesAtMiddle,
             middlePauseDuration: clampedPauseDuration,
             isEnabled: true,
-            isFavorite: false,
+            isFavorite: clampedFavoriteLevel > 0,
+            favoriteLevel: clampedFavoriteLevel,
             correctCount: 0,
             incorrectCount: 0,
             lastReviewedAt: nil,
@@ -595,6 +619,7 @@ final class OverlaySettings {
         customBalloonDesignScale: Double,
         positionName: String,
         sizeName: String,
+        favoriteLevel: Int,
         pausesAtMiddle: Bool,
         middlePauseDuration: Double
     ) {
@@ -637,7 +662,7 @@ final class OverlaySettings {
         let clampedPauseDuration = min(max(middlePauseDuration, 0.1), 30)
         let createdAt = balloons[index].createdAt
         let isEnabled = balloons[index].isEnabled
-        let favoriteLevel = balloons[index].favoriteLevel
+        let clampedFavoriteLevel = BalloonProfile.clampedFavoriteLevel(favoriteLevel)
         let correctCount = balloons[index].correctCount
         let incorrectCount = balloons[index].incorrectCount
         let itemNumber = balloons[index].itemNumber
@@ -682,14 +707,36 @@ final class OverlaySettings {
             pausesAtMiddle: pausesAtMiddle,
             middlePauseDuration: clampedPauseDuration,
             isEnabled: isEnabled,
-            isFavorite: favoriteLevel > 0,
-            favoriteLevel: favoriteLevel,
+            isFavorite: clampedFavoriteLevel > 0,
+            favoriteLevel: clampedFavoriteLevel,
             correctCount: correctCount,
             incorrectCount: incorrectCount,
             lastReviewedAt: lastReviewedAt,
             createdAt: createdAt
         )
         activeBalloonID = id
+        save()
+    }
+
+    func updateBalloonPauseDuration(id: UUID, middlePauseDuration: Double) {
+        guard let index = balloons.firstIndex(where: { $0.id == id }) else { return }
+        let clampedDuration = Self.clampedMiddlePauseDuration(middlePauseDuration)
+        launchMiddlePauseDuration = clampedDuration
+        balloons[index].middlePauseDuration = clampedDuration
+        syncTemporaryBalloonIfNeeded(with: balloons[index])
+        activeBalloonID = id
+        save()
+    }
+
+    func updateAllBalloonPauseDuration(_ middlePauseDuration: Double) {
+        let clampedDuration = Self.clampedMiddlePauseDuration(middlePauseDuration)
+        launchMiddlePauseDuration = clampedDuration
+
+        for index in balloons.indices {
+            balloons[index].middlePauseDuration = clampedDuration
+            syncTemporaryBalloonIfNeeded(with: balloons[index])
+        }
+
         save()
     }
 
@@ -1091,8 +1138,10 @@ final class OverlaySettings {
         defaults.set(randomIntervalMinSeconds, forKey: Keys.randomIntervalMinSeconds)
         defaults.set(randomIntervalMaxSeconds, forKey: Keys.randomIntervalMaxSeconds)
         defaults.set(climbSpeed, forKey: Keys.climbSpeed)
+        defaults.set(launchMiddlePauseDuration, forKey: Keys.launchMiddlePauseDuration)
         defaults.set(launchPositionName, forKey: Keys.launchPositionName)
         defaults.set(isSpeechOutputEnabled, forKey: Keys.isSpeechOutputEnabled)
+        defaults.set(speechVolume, forKey: Keys.speechVolume)
         defaults.set(activeBalloonID?.uuidString, forKey: Keys.activeBalloonID)
 
         if let encoded = try? JSONEncoder().encode(balloons) {
@@ -1311,6 +1360,16 @@ final class OverlaySettings {
         return min(max(value, 0.5), 2.5)
     }
 
+    private static func clampedMiddlePauseDuration(_ value: Double) -> Double {
+        guard value.isFinite else { return 15.0 }
+        return min(max(value, 0.1), 30)
+    }
+
+    private static func clampedSpeechVolume(_ value: Double) -> Double {
+        guard value.isFinite else { return 1.0 }
+        return min(max(value, 0), 1)
+    }
+
     private static func clampedImageScale(_ value: Double) -> Double {
         guard value.isFinite else { return 1.0 }
         return min(max(value, 0.6), 2.0)
@@ -1340,8 +1399,10 @@ private enum Keys {
     static let randomIntervalMinSeconds = "randomIntervalMinSeconds"
     static let randomIntervalMaxSeconds = "randomIntervalMaxSeconds"
     static let climbSpeed = "climbSpeed"
+    static let launchMiddlePauseDuration = "launchMiddlePauseDuration"
     static let launchPositionName = "launchPositionName"
     static let isSpeechOutputEnabled = "isSpeechOutputEnabled"
+    static let speechVolume = "speechVolume"
     static let balloons = "balloons"
     static let activeBalloonID = "activeBalloonID"
     static let isPaused = "isPaused"

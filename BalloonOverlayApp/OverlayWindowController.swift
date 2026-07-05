@@ -69,6 +69,9 @@ struct OverlayInteractionFrames {
     }
 
     func shouldPassThroughToSubview(_ point: CGPoint) -> Bool {
+        if isShowingExplanation {
+            return explanationScrollArea.contains(point)
+        }
         return false
     }
 
@@ -87,7 +90,7 @@ struct OverlayInteractionFrames {
     }
 
     func shouldSendScrollToExplanation(_ point: CGPoint) -> Bool {
-        isShowingExplanation && explanationScrollArea.contains(point)
+        false
     }
 
     func shouldSendDragToOverlay(_ point: CGPoint) -> Bool {
@@ -95,11 +98,7 @@ struct OverlayInteractionFrames {
     }
 
     func shouldSendDragToExplanation(_ point: CGPoint) -> Bool {
-        isShowingExplanation
-            && explanationScrollArea.contains(point)
-            && !explanationCloseButton.contains(point)
-            && !explanationZoomOutButton.contains(point)
-            && !explanationZoomInButton.contains(point)
+        false
     }
 
     func shouldSendClickToExplanationControl(_ point: CGPoint) -> Bool {
@@ -179,6 +178,8 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
     private var isDraggingExplanationScroller = false
     private var explanationDragStartPoint = CGPoint.zero
     private var explanationDragDidMove = false
+    private weak var nativeScrollMouseTarget: NSView?
+    private var isForwardingNativeScrollMouse = false
 
     init(rootView: Content, screenFrame: CGRect) {
         self.screenFrame = screenFrame
@@ -194,13 +195,24 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let overlayPoint = overlayCoordinatePoint(from: point)
         guard OverlayInteractionRegistry.shared.contains(screenFrame: screenFrame, point: overlayPoint) else {
             return nil
         }
 
+        if let scrollHitView = nativeScrollHitView(at: point) {
+            return scrollHitView
+        }
+
         if OverlayInteractionRegistry.shared.shouldPassThroughToSubview(screenFrame: screenFrame, point: overlayPoint) {
+            if let scrollHitView = nativeScrollHitView(at: point) {
+                return scrollHitView
+            }
             return super.hitTest(point) ?? self
         }
 
@@ -208,8 +220,17 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
     }
 
     override func mouseDown(with event: NSEvent) {
-        let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
+        let rawPoint = convert(event.locationInWindow, from: nil)
+        let point = overlayCoordinatePoint(from: rawPoint)
         guard OverlayInteractionRegistry.shared.contains(screenFrame: screenFrame, point: point) else {
+            return
+        }
+
+        if OverlayInteractionRegistry.shared.shouldPassThroughToSubview(screenFrame: screenFrame, point: point),
+           let scrollHitView = nativeScrollHitView(at: rawPoint) {
+            nativeScrollMouseTarget = scrollHitView
+            isForwardingNativeScrollMouse = true
+            scrollHitView.mouseDown(with: event)
             return
         }
 
@@ -246,6 +267,11 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if isForwardingNativeScrollMouse {
+            nativeScrollMouseTarget?.mouseDragged(with: event)
+            return
+        }
+
         let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
         if isDraggingExplanationScroller {
             if hypot(point.x - explanationDragStartPoint.x, point.y - explanationDragStartPoint.y) > 5 {
@@ -270,6 +296,13 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
     }
 
     override func mouseUp(with event: NSEvent) {
+        if isForwardingNativeScrollMouse {
+            nativeScrollMouseTarget?.mouseUp(with: event)
+            nativeScrollMouseTarget = nil
+            isForwardingNativeScrollMouse = false
+            return
+        }
+
         let point = overlayCoordinatePoint(from: convert(event.locationInWindow, from: nil))
         if isDraggingExplanationScroller {
             NotificationCenter.default.post(
@@ -322,6 +355,11 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
             return
         }
 
+        if let scrollView = scrollView(at: rawPoint, in: self) {
+            scrollView.scrollWheel(with: event)
+            return
+        }
+
         guard OverlayInteractionRegistry.shared.shouldForwardScrollWheel(screenFrame: screenFrame, point: point),
               let scrollView = scrollView(at: rawPoint, in: self) else {
             super.scrollWheel(with: event)
@@ -336,6 +374,12 @@ final class PassthroughOverlayHostingView<Content: View>: NSHostingView<Content>
             return CGPoint(x: point.x, y: point.y)
         }
         return CGPoint(x: point.x, y: bounds.height - point.y)
+    }
+
+    private func nativeScrollHitView(at point: NSPoint) -> NSView? {
+        guard let scrollView = scrollView(at: point, in: self) else { return nil }
+        let pointInScrollView = scrollView.convert(point, from: self)
+        return scrollView.hitTest(pointInScrollView) ?? scrollView
     }
 
     private func scrollView(at point: NSPoint, in view: NSView) -> NSScrollView? {

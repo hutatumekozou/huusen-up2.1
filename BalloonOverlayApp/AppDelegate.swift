@@ -64,8 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             self.settings.activateNextEnabledBalloon()
-            self.overlayController.show()
-            self.startTimer()
+            self.overlayController.show { [weak self] in
+                self?.startTimer()
+            }
         }
     }
 

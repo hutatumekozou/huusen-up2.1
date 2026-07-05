@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import Darwin
 
 final class WebAdminServer {
     private let settings: OverlaySettings
@@ -14,6 +15,10 @@ final class WebAdminServer {
 
     var adminURL: URL {
         URL(string: "http://localhost:\(port.rawValue)/")!
+    }
+
+    var mobileAdminURL: URL? {
+        localIPv4Address.flatMap { URL(string: "http://\($0):\(port.rawValue)/") }
     }
 
     init(
@@ -96,6 +101,49 @@ final class WebAdminServer {
     private var portCandidates: [UInt16] {
         let fallbackPorts = (preferredPort...(preferredPort + 34)).filter { $0 != preferredPort }
         return [preferredPort] + fallbackPorts
+    }
+
+    private var localIPv4Address: String? {
+        var interfaces: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&interfaces) == 0, let firstInterface = interfaces else {
+            return nil
+        }
+        defer { freeifaddrs(interfaces) }
+
+        var fallbackAddress: String?
+        var interface = firstInterface
+        while true {
+            let details = interface.pointee
+            if let socketAddress = details.ifa_addr,
+               socketAddress.pointee.sa_family == UInt8(AF_INET) {
+                let name = String(cString: details.ifa_name)
+                let flags = Int32(details.ifa_flags)
+                let isUsable = (flags & IFF_UP) != 0 && (flags & IFF_LOOPBACK) == 0
+                if isUsable {
+                    var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    let result = getnameinfo(
+                        socketAddress,
+                        socklen_t(socketAddress.pointee.sa_len),
+                        &host,
+                        socklen_t(host.count),
+                        nil,
+                        0,
+                        NI_NUMERICHOST
+                    )
+                    if result == 0 {
+                        let address = String(cString: host)
+                        if name == "en0" {
+                            return address
+                        }
+                        fallbackAddress = fallbackAddress ?? address
+                    }
+                }
+            }
+
+            guard let nextInterface = details.ifa_next else { break }
+            interface = nextInterface
+        }
+        return fallbackAddress
     }
 
     private func receiveRequestData(from connection: NWConnection, buffer: Data) {
@@ -390,16 +438,24 @@ final class WebAdminServer {
             return redirect(to: listActionRedirectPath(from: path.query, message: "updated"))
         case "/set-launch-position":
             let positionName = path.query["launchPositionName"] ?? ""
+            let intervalSeconds = path.query.doubleValue(for: "intervalSeconds", fallback: settings.displayInterval)
             let climbSpeed = path.query.doubleValue(for: "climbSpeed", fallback: settings.climbSpeed)
+            let middlePauseDuration = path.query.doubleValue(for: "middlePauseDuration", fallback: settings.launchMiddlePauseDuration)
             let isSpeechOutputEnabled = path.query["speechOutputEnabled"] == "1"
+            let speechVolume = path.query.doubleValue(for: "speechVolumePercent", fallback: settings.speechVolume * 100) / 100
             let selectedTab = path.query["tab"] ?? "create"
-            DispatchQueue.main.async {
-                self.settings.updateLaunchSettings(
-                    positionName: positionName,
-                    climbSpeed: climbSpeed,
-                    isSpeechOutputEnabled: isSpeechOutputEnabled
-                )
-                self.settingsChanged()
+            let editingID = path.query["id"].flatMap(UUID.init(uuidString:))
+            self.settings.updateLaunchSettings(
+                positionName: positionName,
+                climbSpeed: climbSpeed,
+                intervalSeconds: intervalSeconds,
+                isSpeechOutputEnabled: isSpeechOutputEnabled,
+                speechVolume: speechVolume
+            )
+            self.settings.updateAllBalloonPauseDuration(middlePauseDuration)
+            self.settingsChanged()
+            if let editingID {
+                return redirect(to: "/?tab=create&edit=\(editingID.uuidString.urlQueryEscaped)&message=launchPositionUpdated")
             }
             return redirect(to: "/?tab=\(selectedTab.urlQueryEscaped)&message=launchPositionUpdated")
         case "/edit-genre":
@@ -490,7 +546,7 @@ final class WebAdminServer {
             )
         case "/save":
             let query = path.query
-            DispatchQueue.main.async {
+            do {
                 let imageDataURL = query["removeImageData"] == "on" ? "" : query["imageDataURL"]
                 let backImageDataURL = query["removeBackImageData"] == "on" ? "" : query["backImageDataURL"]
                 let explanationImageDataURLs = (1...8).map { index in
@@ -545,8 +601,9 @@ final class WebAdminServer {
                         customBalloonDesignScale: query.doubleValue(for: "customBalloonDesignScale", fallback: 1.0),
                         positionName: query["positionName"] ?? "ランダム",
                         sizeName: query["sizeName"] ?? "標準",
+                        favoriteLevel: BalloonProfile.clampedFavoriteLevel(query["favoriteLevel"].flatMap(Int.init) ?? 0),
                         pausesAtMiddle: query["pausesAtMiddle"] == "on",
-                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: 15.0)
+                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: self.settings.launchMiddlePauseDuration)
                     )
                 } else {
                     self.settings.addBalloon(
@@ -581,9 +638,13 @@ final class WebAdminServer {
                         customBalloonDesignScale: query.doubleValue(for: "customBalloonDesignScale", fallback: 1.0),
                         positionName: query["positionName"] ?? "ランダム",
                         sizeName: query["sizeName"] ?? "標準",
+                        favoriteLevel: BalloonProfile.clampedFavoriteLevel(query["favoriteLevel"].flatMap(Int.init) ?? 0),
                         pausesAtMiddle: query["pausesAtMiddle"] == "on",
-                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: 15.0)
+                        middlePauseDuration: query.doubleValue(for: "middlePauseDuration", fallback: self.settings.launchMiddlePauseDuration)
                     )
+                }
+                if query["middlePauseDuration"] != nil {
+                    self.settings.updateAllBalloonPauseDuration(query.doubleValue(for: "middlePauseDuration", fallback: self.settings.launchMiddlePauseDuration))
                 }
                 self.settingsChanged()
             }
@@ -704,7 +765,8 @@ final class WebAdminServer {
             pausesAtMiddle: true,
             middlePauseDuration: 999,
             isEnabled: true,
-            isFavorite: false,
+            isFavorite: BalloonProfile.clampedFavoriteLevel(query["favoriteLevel"].flatMap(Int.init) ?? 0) > 0,
+            favoriteLevel: BalloonProfile.clampedFavoriteLevel(query["favoriteLevel"].flatMap(Int.init) ?? 0),
             correctCount: 0,
             incorrectCount: 0,
             lastReviewedAt: nil,
@@ -873,6 +935,8 @@ final class WebAdminServer {
         let speechOutputChecked = settings.isSpeechOutputEnabled ? " checked" : ""
         let speechOutputStateClass = settings.isSpeechOutputEnabled ? " enabled" : ""
         let speechOutputStateText = settings.isSpeechOutputEnabled ? "ON" : "OFF"
+        let speechVolumePercent = String(format: "%.0f", settings.speechVolume * 100)
+        let headerIntervalSeconds = formatDuration(settings.displayInterval)
         let editingID = editID.flatMap(UUID.init(uuidString:))
         let editingBalloon = editingID.flatMap { id in settings.balloons.first(where: { $0.id == id }) }
         let formBalloon = editingBalloon ?? newBalloonDraft()
@@ -883,6 +947,12 @@ final class WebAdminServer {
         let previewContent = renderPreviewContent(imageDataURL: imageDataURL, imageName: imageName, text: frontTextInputValue(for: formBalloon))
         let selectedTab = editingBalloon != nil ? "create" : (tab == "list" ? "list" : "create")
         let status = settings.isPaused ? "一時停止中" : "稼働中"
+        let headerMiddlePauseDuration = formatDuration(settings.launchMiddlePauseDuration)
+        let headerEditingIDInput = editingBalloon.map { "<input type=\"hidden\" name=\"id\" value=\"\($0.id.uuidString)\">" } ?? ""
+        let mobileURLStatus = mobileAdminURL.map { url in
+            let escapedURL = url.absoluteString.htmlEscaped
+            return "<div class=\"mobile-admin-url\">スマホ用URL: <a href=\"\(escapedURL)\">\(escapedURL)</a></div>"
+        } ?? "<div class=\"mobile-admin-url unavailable\">スマホ用URL: Wi-Fi接続を確認してください</div>"
         let escapedMessage = message.map { "<p class=\"notice\">\(messageText(for: $0))</p>" } ?? ""
         let colorOptions = renderColorOptions(
             selectedName: formBalloon.colorName,
@@ -943,7 +1013,7 @@ final class WebAdminServer {
               color: #1d1d1f;
             }
             main {
-              max-width: 760px;
+              max-width: 1120px;
               margin: 0 auto;
               padding: 40px 20px;
             }
@@ -961,6 +1031,19 @@ final class WebAdminServer {
             .status {
               font-size: 14px;
               color: #5f6368;
+            }
+            .mobile-admin-url {
+              margin-top: 4px;
+              color: #1769e0;
+              font-size: 14px;
+              font-weight: 700;
+              overflow-wrap: anywhere;
+            }
+            .mobile-admin-url a {
+              color: inherit;
+            }
+            .mobile-admin-url.unavailable {
+              color: #8a9099;
             }
             .panel {
               background: white;
@@ -1033,6 +1116,14 @@ final class WebAdminServer {
               grid-template-columns: minmax(0, 1fr) minmax(230px, 0.65fr);
               gap: 16px;
               align-items: start;
+            }
+            .size-favorite-column {
+              display: grid;
+              gap: 14px;
+            }
+            .favorite-level-field {
+              display: grid;
+              gap: 7px;
             }
             .top-field {
               margin-bottom: 18px;
@@ -2295,9 +2386,9 @@ final class WebAdminServer {
             }
             .header-position-form {
               flex: 1;
-              max-width: 760px;
+              max-width: 1040px;
               display: grid;
-              grid-template-columns: minmax(126px, 0.65fr) minmax(110px, 0.65fr) minmax(125px, 0.75fr) minmax(150px, 1fr) auto;
+              grid-template-columns: minmax(126px, 0.75fr) minmax(88px, 0.5fr) minmax(100px, 0.55fr) minmax(110px, 0.6fr) minmax(125px, 0.7fr) minmax(150px, 1fr) auto;
               gap: 8px;
               align-items: end;
               margin: 0;
@@ -2319,6 +2410,8 @@ final class WebAdminServer {
             }
             .speech-mode-control input {
               position: absolute;
+              width: 1px;
+              height: 1px;
               opacity: 0;
               pointer-events: none;
             }
@@ -2340,17 +2433,58 @@ final class WebAdminServer {
               background: #1769e0;
             }
             @media (max-width: 620px) {
+              main {
+                width: 100%;
+                box-sizing: border-box;
+                padding: 18px 10px 32px;
+              }
               header, .grid, .preview, .item, .panel-heading { display: block; }
+              header { margin-bottom: 16px; }
+              h1 { font-size: 24px; }
+              .panel { padding: 14px; }
+              .tabs { overflow-x: auto; }
+              .tab { flex: 0 0 auto; padding: 0 10px; }
               .heading-actions { justify-content: flex-start; margin: 12px 0 0; }
               .color-size-row { grid-template-columns: 1fr; }
+              .swatches { grid-template-columns: repeat(auto-fit, 42px); gap: 8px; }
+              .font-controls { grid-template-columns: 1fr; }
               .position-controls { grid-template-columns: 1fr; }
               .explanation-image-grid { grid-template-columns: 1fr; }
+              .file-control-row,
+              .genre-add-row,
+              .middle-category-add-row,
+              .small-category-add-row,
+              .category-manage-row,
+              .middle-category-manage-row,
+              .small-category-manage-row,
+              .category-edit-actions {
+                grid-template-columns: 1fr;
+              }
               label { margin-bottom: 14px; }
               .preview-balloon { margin-bottom: 14px; }
               .preview-guidance { margin: 0 0 14px; white-space: normal; }
               .item-dot { margin-bottom: 8px; }
+              .item-marker { width: 100%; margin-bottom: 10px; }
+              .item .actions { flex-wrap: wrap; }
+              .item .actions .button { flex: 1 1 72px; }
+              .list-filter {
+                grid-template-columns: 1fr;
+                gap: 10px;
+              }
+              .list-filter .keyword-filter { grid-column: 1; max-width: none; }
               .filtered-actions { justify-content: stretch; }
               .filtered-actions .button { width: 100%; }
+              .genre-heading,
+              .middle-category-heading,
+              .small-category-heading {
+                display: block;
+              }
+              .genre-actions,
+              .middle-category-actions,
+              .small-category-actions {
+                justify-content: flex-start;
+                margin-top: 10px;
+              }
               .header-position-form {
                 min-width: 0;
                 grid-template-columns: 1fr;
@@ -2364,10 +2498,12 @@ final class WebAdminServer {
             <header>
               <div>
                 <h1>Balloon Overlay</h1>
-                <div class="status">状態: \(status) / 管理URL: \(adminURL.absoluteString)</div>
+                <div class="status">状態: \(status) / Mac用URL: \(adminURL.absoluteString)</div>
+                \(mobileURLStatus)
               </div>
               <form class="header-position-form" action="/set-launch-position" method="post">
                 <input type="hidden" name="tab" value="\(selectedTab.htmlEscaped)">
+                \(headerEditingIDInput)
                 <label class="speech-mode-control">
                   音声出力モード
                   <input type="hidden" name="speechOutputEnabled" value="0">
@@ -2375,8 +2511,16 @@ final class WebAdminServer {
                   <span class="speech-mode-toggle\(speechOutputStateClass)">\(speechOutputStateText)</span>
                 </label>
                 <label>
+                  音量（%）
+                  <input name="speechVolumePercent" type="number" min="0" max="100" step="5" value="\(speechVolumePercent)">
+                </label>
+                <label>
+                  インターバル（秒）
+                  <input name="intervalSeconds" type="number" min="1" step="1" value="\(headerIntervalSeconds)">
+                </label>
+                <label>
                   一旦停止時間（秒）
-                  <input name="middlePauseDuration" form="balloonCreateForm" type="number" min="0" step="0.1" value="\(formatDuration(formBalloon.middlePauseDuration))">
+                  <input id="headerMiddlePauseDurationInput" name="middlePauseDuration" type="number" min="0" step="0.1" value="\(headerMiddlePauseDuration)">
                 </label>
                 <label>
                   上昇スピード（px/秒）
@@ -2491,6 +2635,7 @@ final class WebAdminServer {
             const textInput = document.querySelector('[name="text"]');
             const backTextInput = document.querySelector('[name="backText"]');
             const speechTextInput = document.querySelector('[name="speechText"]');
+            const speechVolumePercentInput = document.querySelector('input[name="speechVolumePercent"]');
             const textFontSizeInput = document.querySelector('input[name="textFontSize"]');
             const imageScaleInput = document.querySelector('input[name="imageScale"]');
             const textOffsetXInput = document.querySelector('input[name="textOffsetX"]');
@@ -2503,6 +2648,8 @@ final class WebAdminServer {
             const backTextOffsetYInput = document.querySelector('input[name="backTextOffsetY"]');
             const backImageCaptionOffsetXInput = document.querySelector('input[name="backImageCaptionOffsetX"]');
             const backImageCaptionOffsetYInput = document.querySelector('input[name="backImageCaptionOffsetY"]');
+            const headerMiddlePauseDurationInput = document.querySelector("#headerMiddlePauseDurationInput");
+            const middlePauseDurationInput = document.querySelector("#middlePauseDurationInput");
             const attachmentPreviewModal = document.querySelector("#attachmentPreviewModal");
             const attachmentPreviewTitle = document.querySelector("#attachmentPreviewTitle");
             const attachmentPreviewFilename = document.querySelector("#attachmentPreviewFilename");
@@ -2712,6 +2859,9 @@ final class WebAdminServer {
 
             document.querySelector('form[action="/save"]')?.addEventListener("submit", (event) => {
               const form = event.currentTarget;
+              if (middlePauseDurationInput && headerMiddlePauseDurationInput) {
+                middlePauseDurationInput.value = headerMiddlePauseDurationInput.value;
+              }
               const returnToInput = form.querySelector('input[name="returnTo"]');
               const returnScrollYInput = form.querySelector('input[name="returnScrollY"]');
               if (returnToInput && !hasListState(returnToInput.value)) {
@@ -2722,9 +2872,21 @@ final class WebAdminServer {
               }
             });
 
+            headerMiddlePauseDurationInput?.addEventListener("input", () => {
+              if (middlePauseDurationInput) {
+                middlePauseDurationInput.value = headerMiddlePauseDurationInput.value;
+              }
+            });
+            if (middlePauseDurationInput && headerMiddlePauseDurationInput) {
+              middlePauseDurationInput.value = headerMiddlePauseDurationInput.value;
+            }
+
             testBalloonButton?.addEventListener("click", async () => {
               const form = testBalloonButton.closest("form");
               if (!form || testBalloonButton.dataset.loading === "1") return;
+              if (middlePauseDurationInput && headerMiddlePauseDurationInput) {
+                middlePauseDurationInput.value = headerMiddlePauseDurationInput.value;
+              }
 
               const originalText = testBalloonButton.textContent;
               testBalloonButton.dataset.loading = "1";
@@ -2760,6 +2922,7 @@ final class WebAdminServer {
               const utterance = new SpeechSynthesisUtterance(text);
               utterance.lang = "ja-JP";
               utterance.rate = 0.9;
+              utterance.volume = Math.min(1, Math.max(0, Number(speechVolumePercentInput?.value || 100) / 100));
               window.speechSynthesis.speak(utterance);
             });
 
@@ -4158,6 +4321,7 @@ final class WebAdminServer {
                 customBalloonDesignScale: formBalloon.customBalloonDesignScale
             )
         let renderedSizeOptions = isEditing ? sizeOptions : renderSizeOptions(selectedName: formBalloon.sizeName)
+        let favoriteLevelOptions = renderFavoriteLevelOptions(selectedLevel: formBalloon.favoriteLevel)
         let previewBodyClasses = [
             "preview-body",
             hasCustomBalloonDesign ? "custom-balloon-design" : ""
@@ -4217,6 +4381,7 @@ final class WebAdminServer {
             <input id="backImageCaptionOffsetXInput" type="hidden" name="backImageCaptionOffsetX" value="\(backImageCaptionOffsetX)">
             <input id="backImageCaptionOffsetYInput" type="hidden" name="backImageCaptionOffsetY" value="\(backImageCaptionOffsetY)">
             <input type="hidden" name="intervalMinutes" value="\(intervalMinutes)">
+            <input id="middlePauseDurationInput" type="hidden" name="middlePauseDuration" value="\(formatDuration(formBalloon.middlePauseDuration))">
             <input type="hidden" name="positionName" value="\(formBalloon.positionName.htmlEscaped)">
             <input type="hidden" name="pausesAtMiddle" value="on">
             \(explanationImageInputs)
@@ -4254,12 +4419,20 @@ final class WebAdminServer {
                     \(renderedColorOptions)
                   </div>
                 </label>
-                <label>
-                  風船サイズ
-                  <div class="segmented three">
-                    \(renderedSizeOptions)
-                  </div>
-                </label>
+                <div class="size-favorite-column">
+                  <label>
+                    風船サイズ
+                    <div class="segmented three">
+                      \(renderedSizeOptions)
+                    </div>
+                  </label>
+                  <label class="favorite-level-field">
+                    お気に入り
+                    <div class="segmented three favorite-level-segments">
+                      \(favoriteLevelOptions)
+                    </div>
+                  </label>
+                </div>
               </div>
               <label class="front-entry">
                 表に入れる文字
@@ -4538,7 +4711,7 @@ final class WebAdminServer {
             positionName: "ランダム",
             sizeName: "ラージ",
             pausesAtMiddle: true,
-            middlePauseDuration: 15.0,
+            middlePauseDuration: settings.launchMiddlePauseDuration,
             isEnabled: true,
             isFavorite: false,
             correctCount: 0,
@@ -4933,7 +5106,7 @@ final class WebAdminServer {
         case "smallCategoryResumed":
             return "小カテゴリ内の商品を再開しました"
         case "launchPositionUpdated":
-            return "風船が這い上がる場所と上昇スピードを更新しました"
+            return "音量・インターバル・一旦停止時間・上昇スピード・風船が這い上がる場所を更新しました"
         case "categoryUpdated":
             return "カテゴリを修正しました"
         case "categoryDeleted":
@@ -5146,6 +5319,22 @@ final class WebAdminServer {
             <label class="segment">
               <input type="radio" name="sizeName" value="\(option.name.htmlEscaped)"\(checked)>
               <span>\(option.name.htmlEscaped)</span>
+            </label>
+            """
+        }.joined(separator: "\n")
+    }
+
+    private func renderFavoriteLevelOptions(selectedLevel: Int) -> String {
+        [
+            (0, "なし"),
+            (1, "★1"),
+            (2, "★2")
+        ].map { level, label in
+            let checked = BalloonProfile.clampedFavoriteLevel(selectedLevel) == level ? " checked" : ""
+            return """
+            <label class="segment">
+              <input type="radio" name="favoriteLevel" value="\(level)"\(checked)>
+              <span>\(label)</span>
             </label>
             """
         }.joined(separator: "\n")
