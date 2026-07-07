@@ -334,15 +334,34 @@
         font-size: 16px;
       }
 
-      .editor {
-        display: grid;
-        gap: 14px;
-      }
-
-      .editor-grid {
+      .detail-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
+      }
+
+      .detail-card {
+        display: grid;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 12px;
+      }
+
+      .detail-label {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .detail-value {
+        margin: 0;
+        color: var(--ink);
+        font-size: 16px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
 
       .full {
@@ -509,7 +528,7 @@
         }
 
         .filters,
-        .editor-grid {
+        .detail-grid {
           grid-template-columns: 1fr;
         }
 
@@ -590,90 +609,17 @@
           </div>
         </section>
 
-        <section id="editorPanel" class="panel" hidden>
+        <section id="detailPanel" class="panel" hidden>
           <div class="topbar">
-            <h2 id="editorTitle">風船編集</h2>
-            <button id="closeEditor" type="button">閉じる</button>
+            <h2>風船詳細</h2>
+            <button id="closeDetail" type="button">閉じる</button>
           </div>
-          <form id="editorForm" class="editor">
-            <input id="editingID" type="hidden">
-            <div class="preview">
-              <div id="previewBalloon" class="preview-balloon" style="--start:#4da3ff;--end:#1769e0;">🎈</div>
-              <p id="previewMeta" class="hint">プレビュー</p>
-            </div>
-            <div id="imageViewer" class="image-viewer" hidden></div>
-            <div class="editor-grid">
-              <label>
-                タイトル
-                <input id="titleInput">
-              </label>
-              <label>
-                大カテゴリ
-                <input id="genreInput" placeholder="未分類">
-              </label>
-              <label>
-                中カテゴリ
-                <input id="middleCategoryInput">
-              </label>
-              <label>
-                小カテゴリ
-                <input id="smallCategoryInput">
-              </label>
-              <label class="full">
-                表の文字
-                <textarea id="textInput"></textarea>
-              </label>
-              <label class="full">
-                裏の文字
-                <textarea id="backTextInput"></textarea>
-              </label>
-              <label class="full">
-                音声出力文字
-                <textarea id="speechTextInput"></textarea>
-              </label>
-              <label class="full">
-                解説
-                <textarea id="explanationTextInput"></textarea>
-              </label>
-              <label>
-                色
-                <select id="colorInput"></select>
-              </label>
-              <label>
-                サイズ
-                <select id="sizeInput">
-                  <option>標準</option>
-                  <option>ラージ</option>
-                  <option>特大</option>
-                </select>
-              </label>
-              <label>
-                表示位置
-                <select id="positionInput">
-                  <option>ランダム</option>
-                  <option>左</option>
-                  <option>中央</option>
-                  <option>右</option>
-                </select>
-              </label>
-              <label>
-                お気に入り
-                <select id="favoriteInput">
-                  <option value="0">なし</option>
-                  <option value="1">★</option>
-                  <option value="2">★2</option>
-                </select>
-              </label>
-              <label class="checkline">
-                <input id="enabledInput" type="checkbox">
-                稼働中にする
-              </label>
-            </div>
-            <div class="actions">
-              <button class="primary" type="submit" hidden>保存</button>
-              <button id="deleteButton" class="danger" type="button" hidden>削除</button>
-            </div>
-          </form>
+          <div class="preview">
+            <div id="previewBalloon" class="preview-balloon" style="--start:#4da3ff;--end:#1769e0;">🎈</div>
+            <p id="previewMeta" class="hint">詳細</p>
+          </div>
+          <div id="imageViewer" class="image-viewer" hidden></div>
+          <div id="detailFields" class="detail-grid"></div>
         </section>
 
         <div id="list" class="list"></div>
@@ -701,20 +647,12 @@
       const summaryNode = document.querySelector("#summary");
       const listNode = document.querySelector("#list");
       const configForm = document.querySelector("#configForm");
-      const editorPanel = document.querySelector("#editorPanel");
-      const editorForm = document.querySelector("#editorForm");
-      const colorInput = document.querySelector("#colorInput");
+      const detailPanel = document.querySelector("#detailPanel");
+      const detailFields = document.querySelector("#detailFields");
       const readOnlyMode = true;
       let config = loadConfig();
       let remoteUpdatedAt = "";
       let payload = defaultPayload();
-
-      colors.forEach(([name]) => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        colorInput.append(option);
-      });
 
       applyConfigToForm();
       bindEvents();
@@ -736,11 +674,9 @@
         });
 
         document.querySelector("#reloadButton").addEventListener("click", loadCloud);
-        document.querySelector("#newButton").addEventListener("click", () => openEditor(newBalloon()));
-        document.querySelector("#closeEditor").addEventListener("click", () => {
-          editorPanel.hidden = true;
+        document.querySelector("#closeDetail").addEventListener("click", () => {
+          detailPanel.hidden = true;
         });
-        document.querySelector("#deleteButton").addEventListener("click", deleteEditingBalloon);
         ["keywordFilter", "enabledFilter", "favoriteFilter"].forEach((id) => {
           document.querySelector(`#${id}`).addEventListener("input", renderList);
         });
@@ -749,13 +685,6 @@
           document.querySelector("#enabledFilter").value = "";
           document.querySelector("#favoriteFilter").value = "";
           renderList();
-        });
-        editorForm.addEventListener("submit", (event) => {
-          event.preventDefault();
-          if (!readOnlyMode) saveEditor(event);
-        });
-        ["titleInput", "textInput", "genreInput", "middleCategoryInput", "smallCategoryInput", "colorInput", "sizeInput", "positionInput", "favoriteInput", "enabledInput"].forEach((id) => {
-          document.querySelector(`#${id}`).addEventListener("input", updatePreview);
         });
       }
 
@@ -881,7 +810,7 @@
             </div>
           `;
           if (readOnlyMode) {
-            item.querySelector('[data-action="detail"]').addEventListener("click", () => openEditor(balloon));
+            item.querySelector('[data-action="detail"]').addEventListener("click", () => openDetail(balloon));
           } else {
             item.querySelector('[data-action="toggle"]').addEventListener("click", () => {
               balloon.isEnabled = !balloon.isEnabled;
@@ -892,7 +821,7 @@
               balloon.isFavorite = balloon.favoriteLevel > 0;
               saveCloud("お気に入りを保存しました");
             });
-            item.querySelector('[data-action="edit"]').addEventListener("click", () => openEditor(balloon));
+            item.querySelector('[data-action="edit"]').addEventListener("click", () => openDetail(balloon));
           }
           listNode.append(item);
         });
@@ -916,87 +845,24 @@
           });
       }
 
-      function openEditor(balloon) {
+      function openDetail(balloon) {
         const normalized = normalizeBalloon(balloon);
-        document.querySelector("#editingID").value = normalized.id;
-        document.querySelector("#editorTitle").textContent = readOnlyMode
-          ? "風船詳細"
-          : payload.balloons.some((item) => item.id === normalized.id) ? "風船編集" : "新規作成";
-        document.querySelector("#titleInput").value = normalized.title;
-        document.querySelector("#textInput").value = normalized.text;
-        document.querySelector("#backTextInput").value = normalized.backText;
-        document.querySelector("#speechTextInput").value = normalized.speechText;
-        document.querySelector("#explanationTextInput").value = normalized.explanationText;
-        document.querySelector("#genreInput").value = normalized.genreName;
-        document.querySelector("#middleCategoryInput").value = normalized.middleCategoryName;
-        document.querySelector("#smallCategoryInput").value = normalized.smallCategoryName;
-        document.querySelector("#colorInput").value = normalized.colorName;
-        document.querySelector("#sizeInput").value = normalized.sizeName;
-        document.querySelector("#positionInput").value = normalized.positionName;
-        document.querySelector("#favoriteInput").value = String(normalized.favoriteLevel || 0);
-        document.querySelector("#enabledInput").checked = normalized.isEnabled;
-        applyEditorReadOnlyState();
-        editorPanel.hidden = false;
+        detailPanel.hidden = false;
         renderImageViewer(normalized);
-        updatePreview();
-        editorPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        renderDetailPreview(normalized);
+        renderDetailFields(normalized);
+        detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
       }
 
-      function applyEditorReadOnlyState() {
-        editorForm.querySelectorAll("input, textarea, select").forEach((field) => {
-          if (field.id !== "editingID") field.disabled = readOnlyMode;
-        });
-      }
-
-      function saveEditor(event) {
-        event.preventDefault();
-        const id = document.querySelector("#editingID").value || crypto.randomUUID();
-        const existingIndex = payload.balloons.findIndex((balloon) => balloon.id === id);
-        const color = colorFor(document.querySelector("#colorInput").value);
-        const balloon = normalizeBalloon(existingIndex >= 0 ? payload.balloons[existingIndex] : newBalloon(id));
-        balloon.title = document.querySelector("#titleInput").value.trim();
-        balloon.text = document.querySelector("#textInput").value;
-        balloon.backText = document.querySelector("#backTextInput").value;
-        balloon.speechText = document.querySelector("#speechTextInput").value;
-        balloon.explanationText = document.querySelector("#explanationTextInput").value;
-        balloon.genreName = document.querySelector("#genreInput").value.trim() || "未分類";
-        balloon.middleCategoryName = document.querySelector("#middleCategoryInput").value.trim();
-        balloon.smallCategoryName = document.querySelector("#smallCategoryInput").value.trim();
-        balloon.colorName = color[0];
-        balloon.colorStartHex = color[1];
-        balloon.colorEndHex = color[2];
-        balloon.sizeName = document.querySelector("#sizeInput").value;
-        balloon.positionName = document.querySelector("#positionInput").value;
-        balloon.favoriteLevel = Number(document.querySelector("#favoriteInput").value || 0);
-        balloon.isFavorite = balloon.favoriteLevel > 0;
-        balloon.isEnabled = document.querySelector("#enabledInput").checked;
-        if (existingIndex >= 0) {
-          payload.balloons[existingIndex] = balloon;
-        } else {
-          payload.balloons.push(balloon);
-        }
-        editorPanel.hidden = true;
-        saveCloud("風船を保存しました");
-      }
-
-      function deleteEditingBalloon() {
-        const id = document.querySelector("#editingID").value;
-        if (!id || !window.confirm("本当に削除しますか？")) return;
-        payload.balloons = payload.balloons.filter((balloon) => balloon.id !== id);
-        editorPanel.hidden = true;
-        saveCloud("削除しました");
-      }
-
-      function updatePreview() {
-        const color = colorFor(document.querySelector("#colorInput").value);
-        const text = document.querySelector("#textInput").value.trim() || document.querySelector("#titleInput").value.trim() || "🎈";
+      function renderDetailPreview(balloon) {
+        const color = colorFor(balloon.colorName);
+        const text = balloon.text?.trim() || balloon.title?.trim() || "🎈";
         const preview = document.querySelector("#previewBalloon");
         preview.style.setProperty("--start", color[1]);
         preview.style.setProperty("--end", color[2]);
         preview.innerHTML = "";
         preview.classList.remove("has-image");
-        const current = currentEditingBalloon();
-        const imageURL = current ? imageSource(current, "imageStorageURL", "imageDataURL") : "";
+        const imageURL = imageSource(balloon, "imageStorageURL", "imageDataURL");
         if (imageURL) {
           const image = document.createElement("img");
           image.src = imageURL;
@@ -1006,14 +872,31 @@
         } else {
           preview.textContent = text.slice(0, 18);
         }
-        document.querySelector("#previewMeta").textContent = `${document.querySelector("#genreInput").value || "未分類"} / ${document.querySelector("#sizeInput").value} / ${document.querySelector("#positionInput").value}`;
+        document.querySelector("#previewMeta").textContent = listMeta(balloon);
       }
 
-      function currentEditingBalloon() {
-        const id = document.querySelector("#editingID").value;
-        if (!id) return null;
-        const balloon = payload.balloons.find((item) => item.id === id);
-        return balloon ? normalizeBalloon(balloon) : null;
+      function renderDetailFields(balloon) {
+        const favoriteLevel = Number(balloon.favoriteLevel) || 0;
+        const fields = [
+          ["タイトル", titleFor(balloon)],
+          ["大カテゴリ", balloon.genreName || "未分類"],
+          ["中カテゴリ", balloon.middleCategoryName || "未設定"],
+          ["小カテゴリ", balloon.smallCategoryName || "未設定"],
+          ["状態", balloon.isEnabled ? "稼働中" : "停止中"],
+          ["お気に入り", favoriteLevel > 0 ? "★".repeat(favoriteLevel) : "なし"],
+          ["色 / サイズ / 表示位置", `${balloon.colorName || "ブルー"} / ${balloon.sizeName || "標準"} / ${balloon.positionName || "ランダム"}`],
+          ["正解 / 不正解", `${Number(balloon.correctCount) || 0} / ${Number(balloon.incorrectCount) || 0}`],
+          ["表の文字", balloon.text || "なし"],
+          ["裏の文字", balloon.backText || "なし"],
+          ["音声出力文字", balloon.speechText || "なし"],
+          ["解説", balloon.explanationText || "なし"]
+        ];
+        detailFields.innerHTML = fields.map(([label, value]) => `
+          <div class="detail-card${["表の文字", "裏の文字", "音声出力文字", "解説"].includes(label) ? " full" : ""}">
+            <span class="detail-label">${escapeHTML(label)}</span>
+            <p class="detail-value">${escapeHTML(value)}</p>
+          </div>
+        `).join("");
       }
 
       function renderImageViewer(balloon) {
