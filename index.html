@@ -40,7 +40,7 @@
 
       button,
       .button {
-        min-height: 38px;
+        min-height: 44px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -85,44 +85,41 @@
 
       input,
       select {
-        height: 38px;
-        padding: 0 10px;
+        height: 44px;
+        padding: 0 12px;
       }
 
       textarea {
-        min-height: 82px;
-        padding: 10px;
+        min-height: 108px;
+        padding: 12px;
         resize: vertical;
         line-height: 1.45;
       }
 
       label {
         display: grid;
-        gap: 7px;
+        gap: 8px;
         min-width: 0;
         color: #3c4043;
-        font-size: 13px;
+        font-size: 15px;
       }
 
       .app {
+        width: min(100%, 920px);
         min-height: 100vh;
-        display: grid;
-        grid-template-columns: 320px minmax(0, 1fr);
+        margin: 0 auto;
+        padding: 24px 18px 44px;
       }
 
       aside {
-        position: sticky;
-        top: 0;
-        height: 100vh;
-        overflow: auto;
-        border-right: 1px solid var(--line);
-        background: #fff;
-        padding: 18px;
+        display: grid;
+        gap: 14px;
+        margin-bottom: 14px;
       }
 
       main {
         min-width: 0;
-        padding: 22px;
+        padding: 0;
       }
 
       .brand {
@@ -135,13 +132,13 @@
 
       h1 {
         margin: 0;
-        font-size: 22px;
+        font-size: 28px;
         letter-spacing: 0;
       }
 
       h2 {
         margin: 0;
-        font-size: 18px;
+        font-size: 24px;
         letter-spacing: 0;
       }
 
@@ -153,11 +150,11 @@
 
       .panel {
         display: grid;
-        gap: 14px;
+        gap: 16px;
         border: 1px solid var(--line);
         border-radius: 8px;
         background: var(--panel);
-        padding: 16px;
+        padding: 18px;
         margin-bottom: 14px;
       }
 
@@ -169,12 +166,12 @@
       .hint {
         margin: 0;
         color: var(--muted);
-        font-size: 13px;
-        line-height: 1.55;
+        font-size: 15px;
+        line-height: 1.6;
       }
 
       .status {
-        min-height: 34px;
+        min-height: 42px;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -182,7 +179,7 @@
         background: var(--soft);
         padding: 8px 10px;
         color: var(--muted);
-        font-size: 13px;
+        font-size: 15px;
         line-height: 1.35;
       }
 
@@ -206,7 +203,8 @@
 
       .summary {
         color: var(--muted);
-        font-size: 13px;
+        font-size: 18px;
+        line-height: 1.45;
       }
 
       .filters {
@@ -218,18 +216,15 @@
 
       .list {
         display: grid;
-        gap: 10px;
+        gap: 14px;
       }
 
       .item {
-        display: grid;
-        grid-template-columns: 72px minmax(0, 1fr) auto;
-        gap: 12px;
-        align-items: center;
+        display: block;
         border: 1px solid var(--line);
         border-radius: 8px;
         background: #fff;
-        padding: 10px;
+        padding: 18px;
       }
 
       .item.disabled {
@@ -238,13 +233,14 @@
 
       .marker {
         display: grid;
-        gap: 5px;
+        gap: 10px;
         place-items: center;
+        margin: 0 auto 14px;
       }
 
       .number {
-        min-width: 48px;
-        min-height: 22px;
+        min-width: 72px;
+        min-height: 28px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -252,13 +248,13 @@
         background: #eef2ff;
         color: #1d4ed8;
         padding: 0 8px;
-        font-size: 12px;
+        font-size: 17px;
         font-weight: 800;
       }
 
       .dot {
-        width: 30px;
-        height: 30px;
+        width: 42px;
+        height: 42px;
         border-radius: 50%;
         background: linear-gradient(135deg, var(--start), var(--end));
         box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
@@ -271,28 +267,30 @@
 
       .title-row {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
+        flex-wrap: wrap;
         gap: 8px;
         min-width: 0;
       }
 
       .title {
         margin: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        min-width: min(100%, 260px);
+        overflow-wrap: anywhere;
         font-weight: 800;
+        font-size: 22px;
+        line-height: 1.35;
       }
 
       .pill {
-        min-height: 22px;
+        min-height: 28px;
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
         background: #dcfce7;
         color: #166534;
         padding: 0 8px;
-        font-size: 12px;
+        font-size: 15px;
         font-weight: 800;
         white-space: nowrap;
       }
@@ -303,18 +301,37 @@
       }
 
       .meta {
-        margin: 4px 0 0;
+        margin: 8px 0 0;
         color: var(--muted);
-        font-size: 13px;
+        font-size: 18px;
         line-height: 1.45;
         overflow-wrap: anywhere;
+      }
+
+      .excerpt {
+        margin: 8px 0 0;
+        color: #4f5661;
+        font-size: 17px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .excerpt:empty {
+        display: none;
       }
 
       .actions {
         display: flex;
         flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 8px;
+        justify-content: flex-start;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .item .actions button {
+        min-width: 92px;
+        min-height: 44px;
+        font-size: 16px;
       }
 
       .editor {
@@ -333,12 +350,12 @@
       }
 
       .checkline {
-        min-height: 38px;
+        min-height: 44px;
         display: flex;
         align-items: center;
         gap: 8px;
         color: var(--ink);
-        font-size: 14px;
+        font-size: 16px;
       }
 
       .checkline input {
@@ -348,7 +365,7 @@
       }
 
       .preview {
-        min-height: 90px;
+        min-height: 110px;
         display: flex;
         align-items: center;
         gap: 14px;
@@ -359,8 +376,8 @@
       }
 
       .preview-balloon {
-        width: 72px;
-        height: 72px;
+        width: 86px;
+        height: 86px;
         flex: 0 0 auto;
         display: grid;
         place-items: center;
@@ -369,7 +386,7 @@
         color: #fff;
         text-align: center;
         padding: 8px;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 800;
         line-height: 1.2;
       }
@@ -388,7 +405,7 @@
 
       .image-viewer {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 12px;
       }
 
@@ -424,33 +441,71 @@
 
       @media (max-width: 860px) {
         .app {
-          grid-template-columns: 1fr;
+          padding: 16px 12px 34px;
         }
 
-        aside {
-          position: static;
-          height: auto;
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
+        h1 {
+          font-size: 26px;
         }
 
-        main {
-          padding: 14px;
+        h2 {
+          font-size: 30px;
+          line-height: 1.25;
         }
 
-        .topbar,
-        .item {
+        label {
+          font-size: 18px;
+        }
+
+        input,
+        select {
+          height: 58px;
+          font-size: 22px;
+        }
+
+        textarea {
+          font-size: 19px;
+        }
+
+        button,
+        .button {
+          min-height: 58px;
+          padding: 0 18px;
+          font-size: 22px;
+        }
+
+        .panel {
+          padding: 18px;
+        }
+
+        .topbar {
           display: block;
         }
 
         .marker {
-          width: 72px;
-          margin-bottom: 10px;
+          width: 100%;
         }
 
-        .actions {
-          justify-content: flex-start;
-          margin-top: 10px;
+        .item {
+          padding: 22px 20px;
+        }
+
+        .title {
+          font-size: 25px;
+        }
+
+        .meta {
+          font-size: 22px;
+        }
+
+        .excerpt {
+          font-size: 20px;
+        }
+
+        .item .actions button {
+          flex: 1 1 130px;
+          min-height: 58px;
+          font-size: 22px;
         }
 
         .filters,
@@ -806,15 +861,16 @@
           item.className = `item${balloon.isEnabled ? "" : " disabled"}`;
           item.innerHTML = `
             <div class="marker">
-              <span class="number">${balloon.itemNumber || "-"}</span>
+              <span class="number">品番 ${balloon.itemNumber || "-"}</span>
               <span class="dot" style="--start:${color[1]};--end:${color[2]}"></span>
             </div>
-            <div>
+            <div class="item-body">
               <div class="title-row">
                 <p class="title">${escapeHTML(titleFor(balloon))}</p>
                 <span class="pill${balloon.isEnabled ? "" : " off"}">${balloon.isEnabled ? "稼働中" : "停止中"}</span>
               </div>
-              <p class="meta">${escapeHTML(categoryFor(balloon))} / ${escapeHTML(balloon.sizeName || "標準")} / ${escapeHTML(balloon.positionName || "ランダム")} / お気に入り ${"★".repeat(balloon.favoriteLevel || 0) || "なし"} / ${escapeHTML(contentSummary(balloon))}</p>
+              <p class="meta">${escapeHTML(listMeta(balloon))}</p>
+              <p class="excerpt">${escapeHTML(contentSummary(balloon))}</p>
             </div>
             <div class="actions">
               ${readOnlyMode
@@ -1094,6 +1150,28 @@
 
       function categoryFor(balloon) {
         return [balloon.genreName || "未分類", balloon.middleCategoryName, balloon.smallCategoryName].filter(Boolean).join(" / ");
+      }
+
+      function listMeta(balloon) {
+        const favoriteLevel = Number(balloon.favoriteLevel) || 0;
+        const favoriteText = favoriteLevel > 0 ? "★".repeat(favoriteLevel) : "なし";
+        const middlePauseDuration = Number(balloon.middlePauseDuration) || 0;
+        const pauseText = balloon.pausesAtMiddle
+          ? `中央停止 ${middlePauseDuration.toFixed(1)}秒`
+          : "中央停止なし";
+        const hasBack = Boolean((balloon.backText || "").trim() || imageSource(balloon, "backImageStorageURL", "backImageDataURL"));
+        const hasFrontImage = Boolean(imageSource(balloon, "imageStorageURL", "imageDataURL"));
+        return [
+          balloon.smallCategoryName || balloon.middleCategoryName || balloon.genreName || "未分類",
+          `正解 ${Number(balloon.correctCount) || 0}`,
+          `不正解 ${Number(balloon.incorrectCount) || 0}`,
+          balloon.colorName || "ブルー",
+          balloon.positionName || "ランダム",
+          balloon.sizeName || "標準",
+          pauseText,
+          hasBack ? "裏あり" : "裏なし",
+          hasFrontImage ? "表: 添付画像" : "表: 文字"
+        ].join(" / ");
       }
 
       function contentSummary(balloon) {
