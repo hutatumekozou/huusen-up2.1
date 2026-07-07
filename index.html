@@ -690,7 +690,7 @@
       let remoteUpdatedAt = "";
       let payload = defaultPayload();
       let activeFilters = {
-        keyword: "",
+        keywords: [],
         enabled: "",
         favorite: 0
       };
@@ -732,7 +732,7 @@
           document.querySelector("#enabledFilter").value = "";
           document.querySelector("#favoriteFilter").value = "";
           activeFilters = {
-            keyword: "",
+            keywords: [],
             enabled: "",
             favorite: 0
           };
@@ -748,10 +748,19 @@
 
       function applyFiltersFromForm() {
         activeFilters = {
-          keyword: document.querySelector("#keywordFilter").value.trim().toLowerCase(),
+          keywords: searchKeywords(document.querySelector("#keywordFilter").value),
           enabled: document.querySelector("#enabledFilter").value,
           favorite: Number(document.querySelector("#favoriteFilter").value || 0)
         };
+      }
+
+      function searchKeywords(value) {
+        return String(value || "")
+          .toLowerCase()
+          .replace(/\u3000/g, " ")
+          .split(/\s+/)
+          .map((keyword) => keyword.trim())
+          .filter(Boolean);
       }
 
       function loadConfig() {
@@ -895,18 +904,18 @@
       }
 
       function filteredBalloons() {
-        const { keyword, enabled, favorite } = activeFilters;
+        const { keywords = [], enabled, favorite } = activeFilters;
         return [...payload.balloons]
           .sort((a, b) => (b.itemNumber || 0) - (a.itemNumber || 0))
           .filter((balloon) => {
             if (enabled === "enabled" && !balloon.isEnabled) return false;
             if (enabled === "disabled" && balloon.isEnabled) return false;
             if (favorite && (balloon.favoriteLevel || 0) < favorite) return false;
-            if (!keyword) return true;
-            return [balloon.title, balloon.text, balloon.backText, balloon.explanationText, balloon.genreName, balloon.middleCategoryName, balloon.smallCategoryName]
+            if (keywords.length === 0) return true;
+            const searchableText = [balloon.title, balloon.text, balloon.backText, balloon.explanationText, balloon.genreName, balloon.middleCategoryName, balloon.smallCategoryName]
               .join(" ")
-              .toLowerCase()
-              .includes(keyword);
+              .toLowerCase();
+            return keywords.every((keyword) => searchableText.includes(keyword));
           });
       }
 
