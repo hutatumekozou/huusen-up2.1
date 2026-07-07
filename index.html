@@ -163,6 +163,23 @@
         gap: 12px;
       }
 
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .compact-button {
+        min-height: 34px;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+
+      .collapsible[hidden] {
+        display: none;
+      }
+
       .hint {
         margin: 0;
         color: var(--muted);
@@ -558,23 +575,28 @@
         </div>
 
         <section class="panel">
-          <h2>クラウド接続</h2>
-          <p class="hint">Mac側の「クラウド同期設定」と同じ Supabase Project URL、anon key、同期IDを入れてください。この画面は閲覧専用です。</p>
-          <form id="configForm" class="config-form">
-            <label>
-              Supabase Project URL
-              <input id="supabaseURL" autocomplete="off" placeholder="https://xxxxx.supabase.co">
-            </label>
-            <label>
-              anon key
-              <input id="anonKey" autocomplete="off" placeholder="eyJ...">
-            </label>
-            <label>
-              同期ID
-              <input id="rowID" autocomplete="off" value="default">
-            </label>
-            <button class="primary" type="submit">接続して読み込み</button>
-          </form>
+          <div class="panel-head">
+            <h2>クラウド接続</h2>
+            <button id="toggleConfig" class="compact-button" type="button" aria-expanded="true">閉じる</button>
+          </div>
+          <div id="configBody" class="collapsible">
+            <p class="hint">Mac側の「クラウド同期設定」と同じ Supabase Project URL、anon key、同期IDを入れてください。この画面は閲覧専用です。</p>
+            <form id="configForm" class="config-form">
+              <label>
+                Supabase Project URL
+                <input id="supabaseURL" autocomplete="off" placeholder="https://xxxxx.supabase.co">
+              </label>
+              <label>
+                anon key
+                <input id="anonKey" autocomplete="off" placeholder="eyJ...">
+              </label>
+              <label>
+                同期ID
+                <input id="rowID" autocomplete="off" value="default">
+              </label>
+              <button class="primary" type="submit">接続して読み込み</button>
+            </form>
+          </div>
           <div id="status" class="status">未接続</div>
         </section>
 
@@ -659,6 +681,8 @@
       const summaryNode = document.querySelector("#summary");
       const listNode = document.querySelector("#list");
       const configForm = document.querySelector("#configForm");
+      const configBody = document.querySelector("#configBody");
+      const toggleConfigButton = document.querySelector("#toggleConfig");
       const detailPanel = document.querySelector("#detailPanel");
       const detailFields = document.querySelector("#detailFields");
       const readOnlyMode = true;
@@ -679,6 +703,10 @@
       }
 
       function bindEvents() {
+        toggleConfigButton.addEventListener("click", () => {
+          setConfigCollapsed(!configBody.hidden);
+        });
+
         configForm.addEventListener("submit", (event) => {
           event.preventDefault();
           config = {
@@ -710,6 +738,12 @@
           };
           renderList();
         });
+      }
+
+      function setConfigCollapsed(isCollapsed) {
+        configBody.hidden = isCollapsed;
+        toggleConfigButton.textContent = isCollapsed ? "設定を開く" : "閉じる";
+        toggleConfigButton.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
       }
 
       function applyFiltersFromForm() {
@@ -769,6 +803,7 @@
           payload = normalizePayload(rows[0].payload);
           remoteUpdatedAt = rows[0].updated_at || "";
           setStatus(`読み込み済み ${formatRemoteTime(remoteUpdatedAt)}`, "ok");
+          setConfigCollapsed(true);
           render();
         } catch (error) {
           setStatus(`読み込み失敗: ${error.message}`, "error");
