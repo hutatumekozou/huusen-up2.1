@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>huusen-up cloud</title>
+    <meta name="description" content="huusen-up のクラウド管理画面">
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1d1d1f;
+        --muted: #62646a;
+        --line: #dfe2e8;
+        --paper: #f6f7f9;
+        --panel: #ffffff;
+        --blue: #1769e0;
+        --danger: #d93025;
+        --ok: #15803d;
+        --soft: #eef2f7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button,
+      .button {
+        min-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border: 1px solid #b8bdc6;
+        border-radius: 6px;
+        padding: 0 12px;
+        background: #fff;
+        color: var(--ink);
+        text-decoration: none;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      button.primary {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: #fff;
+      }
+
+      button.danger {
+        border-color: var(--danger);
+        background: var(--danger);
+        color: #fff;
+      }
+
+      button:disabled {
+        color: #9aa0a6;
+        background: #f1f3f5;
+        cursor: default;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid #c7cbd1;
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink);
+      }
+
+      input,
+      select {
+        height: 38px;
+        padding: 0 10px;
+      }
+
+      textarea {
+        min-height: 82px;
+        padding: 10px;
+        resize: vertical;
+        line-height: 1.45;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+        color: #3c4043;
+        font-size: 13px;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+      }
+
+      aside {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow: auto;
+        border-right: 1px solid var(--line);
+        background: #fff;
+        padding: 18px;
+      }
+
+      main {
+        min-width: 0;
+        padding: 22px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      .panel {
+        display: grid;
+        gap: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 16px;
+        margin-bottom: 14px;
+      }
+
+      .config-form {
+        display: grid;
+        gap: 12px;
+      }
+
+      .hint {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .status {
+        min-height: 34px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 6px;
+        background: var(--soft);
+        padding: 8px 10px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .status.ok {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status.error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+
+      .summary {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .filters {
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) 150px 150px auto;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .item {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 10px;
+      }
+
+      .item.disabled {
+        background: #f8f9fb;
+      }
+
+      .marker {
+        display: grid;
+        gap: 5px;
+        place-items: center;
+      }
+
+      .number {
+        min-width: 48px;
+        min-height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #1d4ed8;
+        padding: 0 8px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .dot {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--start), var(--end));
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
+      }
+
+      .item.disabled .dot {
+        filter: grayscale(1);
+        opacity: 0.45;
+      }
+
+      .title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .title {
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 800;
+      }
+
+      .pill {
+        min-height: 22px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: #dcfce7;
+        color: #166534;
+        padding: 0 8px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .pill.off {
+        background: #eef0f3;
+        color: #5f6368;
+      }
+
+      .meta {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .editor {
+        display: grid;
+        gap: 14px;
+      }
+
+      .editor-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .full {
+        grid-column: 1 / -1;
+      }
+
+      .checkline {
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-size: 14px;
+      }
+
+      .checkline input {
+        width: 18px;
+        height: 18px;
+        padding: 0;
+      }
+
+      .preview {
+        min-height: 90px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fafc;
+        padding: 12px;
+      }
+
+      .preview-balloon {
+        width: 72px;
+        height: 72px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--start), var(--end));
+        color: #fff;
+        text-align: center;
+        padding: 8px;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+
+      .preview-balloon.has-image {
+        overflow: hidden;
+        padding: 0;
+        background: #fff;
+      }
+
+      .preview-balloon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .image-viewer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+      }
+
+      .image-viewer figure {
+        margin: 0;
+        display: grid;
+        gap: 6px;
+      }
+
+      .image-viewer img {
+        width: 100%;
+        max-height: 220px;
+        object-fit: contain;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .image-viewer figcaption {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .empty {
+        border: 1px dashed #c7cbd1;
+        border-radius: 8px;
+        background: #fff;
+        padding: 26px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      @media (max-width: 860px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        aside {
+          position: static;
+          height: auto;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        main {
+          padding: 14px;
+        }
+
+        .topbar,
+        .item {
+          display: block;
+        }
+
+        .marker {
+          width: 72px;
+          margin-bottom: 10px;
+        }
+
+        .actions {
+          justify-content: flex-start;
+          margin-top: 10px;
+        }
+
+        .filters,
+        .editor-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .full {
+          grid-column: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside>
+        <div class="brand">
+          <h1>huusen-up</h1>
+          <span aria-hidden="true">🎈</span>
+        </div>
+
+        <section class="panel">
+          <h2>クラウド接続</h2>
+          <p class="hint">Mac側の「クラウド同期設定」と同じ Supabase Project URL、anon key、同期IDを入れてください。この画面は閲覧専用です。</p>
+          <form id="configForm" class="config-form">
+            <label>
+              Supabase Project URL
+              <input id="supabaseURL" autocomplete="off" placeholder="https://xxxxx.supabase.co">
+            </label>
+            <label>
+              anon key
+              <input id="anonKey" autocomplete="off" placeholder="eyJ...">
+            </label>
+            <label>
+              同期ID
+              <input id="rowID" autocomplete="off" value="default">
+            </label>
+            <button class="primary" type="submit">接続して読み込み</button>
+          </form>
+          <div id="status" class="status">未接続</div>
+        </section>
+
+        <section class="panel">
+          <h2>同期</h2>
+          <p class="hint">スマホ側では保存しません。Mac側の管理画面で「PCからクラウドへ手動同期」を押した後、ここで再読み込みします。</p>
+          <button id="reloadButton" type="button">再読み込み</button>
+        </section>
+      </aside>
+
+      <main>
+        <div class="topbar">
+          <div>
+            <h2>風船一覧</h2>
+            <div id="summary" class="summary">0件</div>
+          </div>
+          <button id="newButton" class="primary" type="button" hidden>新規作成</button>
+        </div>
+
+        <section class="panel">
+          <div class="filters">
+            <label>
+              キーワード
+              <input id="keywordFilter" placeholder="タイトル / 本文 / カテゴリ">
+            </label>
+            <label>
+              状態
+              <select id="enabledFilter">
+                <option value="">すべて</option>
+                <option value="enabled">稼働中</option>
+                <option value="disabled">停止中</option>
+              </select>
+            </label>
+            <label>
+              お気に入り
+              <select id="favoriteFilter">
+                <option value="">すべて</option>
+                <option value="1">★以上</option>
+                <option value="2">★2のみ</option>
+              </select>
+            </label>
+            <button id="clearFilters" type="button">解除</button>
+          </div>
+        </section>
+
+        <section id="editorPanel" class="panel" hidden>
+          <div class="topbar">
+            <h2 id="editorTitle">風船編集</h2>
+            <button id="closeEditor" type="button">閉じる</button>
+          </div>
+          <form id="editorForm" class="editor">
+            <input id="editingID" type="hidden">
+            <div class="preview">
+              <div id="previewBalloon" class="preview-balloon" style="--start:#4da3ff;--end:#1769e0;">🎈</div>
+              <p id="previewMeta" class="hint">プレビュー</p>
+            </div>
+            <div id="imageViewer" class="image-viewer" hidden></div>
+            <div class="editor-grid">
+              <label>
+                タイトル
+                <input id="titleInput">
+              </label>
+              <label>
+                大カテゴリ
+                <input id="genreInput" placeholder="未分類">
+              </label>
+              <label>
+                中カテゴリ
+                <input id="middleCategoryInput">
+              </label>
+              <label>
+                小カテゴリ
+                <input id="smallCategoryInput">
+              </label>
+              <label class="full">
+                表の文字
+                <textarea id="textInput"></textarea>
+              </label>
+              <label class="full">
+                裏の文字
+                <textarea id="backTextInput"></textarea>
+              </label>
+              <label class="full">
+                音声出力文字
+                <textarea id="speechTextInput"></textarea>
+              </label>
+              <label class="full">
+                解説
+                <textarea id="explanationTextInput"></textarea>
+              </label>
+              <label>
+                色
+                <select id="colorInput"></select>
+              </label>
+              <label>
+                サイズ
+                <select id="sizeInput">
+                  <option>標準</option>
+                  <option>ラージ</option>
+                  <option>特大</option>
+                </select>
+              </label>
+              <label>
+                表示位置
+                <select id="positionInput">
+                  <option>ランダム</option>
+                  <option>左</option>
+                  <option>中央</option>
+                  <option>右</option>
+                </select>
+              </label>
+              <label>
+                お気に入り
+                <select id="favoriteInput">
+                  <option value="0">なし</option>
+                  <option value="1">★</option>
+                  <option value="2">★2</option>
+                </select>
+              </label>
+              <label class="checkline">
+                <input id="enabledInput" type="checkbox">
+                稼働中にする
+              </label>
+            </div>
+            <div class="actions">
+              <button class="primary" type="submit" hidden>保存</button>
+              <button id="deleteButton" class="danger" type="button" hidden>削除</button>
+            </div>
+          </form>
+        </section>
+
+        <div id="list" class="list"></div>
+      </main>
+    </div>
+
+    <script>
+      const colors = [
+        ["レッド", "#ff4770", "#d90d31"],
+        ["ピンク", "#ff6ec7", "#d72f91"],
+        ["オレンジ", "#ff9f43", "#e86b00"],
+        ["イエロー", "#ffd84d", "#f2a900"],
+        ["グリーン", "#4cd964", "#159947"],
+        ["ミント", "#45d6c5", "#149b90"],
+        ["ブルー", "#4da3ff", "#1769e0"],
+        ["パープル", "#a78bfa", "#6d45d8"],
+        ["ゴールド", "#ffd766", "#b77900"],
+        ["シルバー", "#f8fafc", "#94a3b8"],
+        ["濃グレー", "#6b7280", "#374151"],
+        ["ブラック", "#5b6472", "#171a21"]
+      ];
+
+      const storageKey = "huusenCloudConfig";
+      const statusNode = document.querySelector("#status");
+      const summaryNode = document.querySelector("#summary");
+      const listNode = document.querySelector("#list");
+      const configForm = document.querySelector("#configForm");
+      const editorPanel = document.querySelector("#editorPanel");
+      const editorForm = document.querySelector("#editorForm");
+      const colorInput = document.querySelector("#colorInput");
+      const readOnlyMode = true;
+      let config = loadConfig();
+      let remoteUpdatedAt = "";
+      let payload = defaultPayload();
+
+      colors.forEach(([name]) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        colorInput.append(option);
+      });
+
+      applyConfigToForm();
+      bindEvents();
+      render();
+      if (config.supabaseURL && config.anonKey) {
+        loadCloud();
+      }
+
+      function bindEvents() {
+        configForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          config = {
+            supabaseURL: document.querySelector("#supabaseURL").value.trim().replace(/\/+$/, ""),
+            anonKey: document.querySelector("#anonKey").value.trim(),
+            rowID: document.querySelector("#rowID").value.trim() || "default"
+          };
+          localStorage.setItem(storageKey, JSON.stringify(config));
+          loadCloud();
+        });
+
+        document.querySelector("#reloadButton").addEventListener("click", loadCloud);
+        document.querySelector("#newButton").addEventListener("click", () => openEditor(newBalloon()));
+        document.querySelector("#closeEditor").addEventListener("click", () => {
+          editorPanel.hidden = true;
+        });
+        document.querySelector("#deleteButton").addEventListener("click", deleteEditingBalloon);
+        ["keywordFilter", "enabledFilter", "favoriteFilter"].forEach((id) => {
+          document.querySelector(`#${id}`).addEventListener("input", renderList);
+        });
+        document.querySelector("#clearFilters").addEventListener("click", () => {
+          document.querySelector("#keywordFilter").value = "";
+          document.querySelector("#enabledFilter").value = "";
+          document.querySelector("#favoriteFilter").value = "";
+          renderList();
+        });
+        editorForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          if (!readOnlyMode) saveEditor(event);
+        });
+        ["titleInput", "textInput", "genreInput", "middleCategoryInput", "smallCategoryInput", "colorInput", "sizeInput", "positionInput", "favoriteInput", "enabledInput"].forEach((id) => {
+          document.querySelector(`#${id}`).addEventListener("input", updatePreview);
+        });
+      }
+
+      function loadConfig() {
+        try {
+          return JSON.parse(localStorage.getItem(storageKey) || "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      function applyConfigToForm() {
+        document.querySelector("#supabaseURL").value = config.supabaseURL || "";
+        document.querySelector("#anonKey").value = config.anonKey || "";
+        document.querySelector("#rowID").value = config.rowID || "default";
+      }
+
+      function endpoint() {
+        const base = (config.supabaseURL || "").replace(/\/+$/, "");
+        return `${base}/rest/v1/balloon_sync_state`;
+      }
+
+      function headers(extra = {}) {
+        return {
+          apikey: config.anonKey,
+          Authorization: `Bearer ${config.anonKey}`,
+          Accept: "application/json",
+          ...extra
+        };
+      }
+
+      async function loadCloud() {
+        if (!config.supabaseURL || !config.anonKey) {
+          setStatus("Supabase URL と anon key を入力してください", "error");
+          return;
+        }
+        setStatus("読み込み中...");
+        try {
+          const url = `${endpoint()}?id=eq.${encodeURIComponent(config.rowID || "default")}&select=id,payload,updated_at&limit=1`;
+          const response = await fetch(url, { headers: headers() });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const rows = await response.json();
+          if (rows.length === 0) {
+            payload = defaultPayload();
+            remoteUpdatedAt = "";
+            setStatus("クラウド上に同期データがありません。Mac側から手動同期してください", "error");
+            render();
+            return;
+          }
+          payload = normalizePayload(rows[0].payload);
+          remoteUpdatedAt = rows[0].updated_at || "";
+          setStatus(`読み込み済み ${formatRemoteTime(remoteUpdatedAt)}`, "ok");
+          render();
+        } catch (error) {
+          setStatus(`読み込み失敗: ${error.message}`, "error");
+        }
+      }
+
+      async function saveCloud(successMessage = "保存しました") {
+        if (readOnlyMode) {
+          setStatus("このスマホ画面は閲覧専用です。変更はMac側で行ってください", "error");
+          return;
+        }
+        payload.stateModifiedAt = nowSeconds();
+        setStatus("保存中...");
+        try {
+          const response = await fetch(`${endpoint()}?on_conflict=id&select=id,payload,updated_at`, {
+            method: "POST",
+            headers: headers({
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates,return=representation"
+            }),
+            body: JSON.stringify([{ id: config.rowID || "default", payload }])
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const rows = await response.json();
+          remoteUpdatedAt = rows[0]?.updated_at || remoteUpdatedAt;
+          setStatus(`${successMessage} ${formatRemoteTime(remoteUpdatedAt)}`, "ok");
+          render();
+        } catch (error) {
+          setStatus(`保存失敗: ${error.message}`, "error");
+        }
+      }
+
+      function render() {
+        summaryNode.textContent = `${payload.balloons.length}件 / 稼働中 ${payload.balloons.filter((balloon) => balloon.isEnabled).length}件`;
+        renderList();
+      }
+
+      function renderList() {
+        const balloons = filteredBalloons();
+        listNode.innerHTML = "";
+        if (balloons.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "表示する風船がありません";
+          listNode.append(empty);
+          return;
+        }
+        balloons.forEach((balloon) => {
+          const color = colorFor(balloon.colorName);
+          const item = document.createElement("article");
+          item.className = `item${balloon.isEnabled ? "" : " disabled"}`;
+          item.innerHTML = `
+            <div class="marker">
+              <span class="number">${balloon.itemNumber || "-"}</span>
+              <span class="dot" style="--start:${color[1]};--end:${color[2]}"></span>
+            </div>
+            <div>
+              <div class="title-row">
+                <p class="title">${escapeHTML(titleFor(balloon))}</p>
+                <span class="pill${balloon.isEnabled ? "" : " off"}">${balloon.isEnabled ? "稼働中" : "停止中"}</span>
+              </div>
+              <p class="meta">${escapeHTML(categoryFor(balloon))} / ${escapeHTML(balloon.sizeName || "標準")} / ${escapeHTML(balloon.positionName || "ランダム")} / お気に入り ${"★".repeat(balloon.favoriteLevel || 0) || "なし"} / ${escapeHTML(contentSummary(balloon))}</p>
+            </div>
+            <div class="actions">
+              ${readOnlyMode
+                ? '<button type="button" data-action="detail">詳細</button>'
+                : `<button type="button" data-action="toggle">${balloon.isEnabled ? "停止" : "再開"}</button>
+                  <button type="button" data-action="favorite">${favoriteButtonTitle(balloon)}</button>
+                  <button type="button" data-action="edit">編集</button>`}
+            </div>
+          `;
+          if (readOnlyMode) {
+            item.querySelector('[data-action="detail"]').addEventListener("click", () => openEditor(balloon));
+          } else {
+            item.querySelector('[data-action="toggle"]').addEventListener("click", () => {
+              balloon.isEnabled = !balloon.isEnabled;
+              saveCloud("状態を保存しました");
+            });
+            item.querySelector('[data-action="favorite"]').addEventListener("click", () => {
+              balloon.favoriteLevel = (Number(balloon.favoriteLevel) || 0) >= 2 ? 0 : (Number(balloon.favoriteLevel) || 0) + 1;
+              balloon.isFavorite = balloon.favoriteLevel > 0;
+              saveCloud("お気に入りを保存しました");
+            });
+            item.querySelector('[data-action="edit"]').addEventListener("click", () => openEditor(balloon));
+          }
+          listNode.append(item);
+        });
+      }
+
+      function filteredBalloons() {
+        const keyword = document.querySelector("#keywordFilter").value.trim().toLowerCase();
+        const enabled = document.querySelector("#enabledFilter").value;
+        const favorite = Number(document.querySelector("#favoriteFilter").value || 0);
+        return [...payload.balloons]
+          .sort((a, b) => (b.itemNumber || 0) - (a.itemNumber || 0))
+          .filter((balloon) => {
+            if (enabled === "enabled" && !balloon.isEnabled) return false;
+            if (enabled === "disabled" && balloon.isEnabled) return false;
+            if (favorite && (balloon.favoriteLevel || 0) < favorite) return false;
+            if (!keyword) return true;
+            return [balloon.title, balloon.text, balloon.backText, balloon.explanationText, balloon.genreName, balloon.middleCategoryName, balloon.smallCategoryName]
+              .join(" ")
+              .toLowerCase()
+              .includes(keyword);
+          });
+      }
+
+      function openEditor(balloon) {
+        const normalized = normalizeBalloon(balloon);
+        document.querySelector("#editingID").value = normalized.id;
+        document.querySelector("#editorTitle").textContent = readOnlyMode
+          ? "風船詳細"
+          : payload.balloons.some((item) => item.id === normalized.id) ? "風船編集" : "新規作成";
+        document.querySelector("#titleInput").value = normalized.title;
+        document.querySelector("#textInput").value = normalized.text;
+        document.querySelector("#backTextInput").value = normalized.backText;
+        document.querySelector("#speechTextInput").value = normalized.speechText;
+        document.querySelector("#explanationTextInput").value = normalized.explanationText;
+        document.querySelector("#genreInput").value = normalized.genreName;
+        document.querySelector("#middleCategoryInput").value = normalized.middleCategoryName;
+        document.querySelector("#smallCategoryInput").value = normalized.smallCategoryName;
+        document.querySelector("#colorInput").value = normalized.colorName;
+        document.querySelector("#sizeInput").value = normalized.sizeName;
+        document.querySelector("#positionInput").value = normalized.positionName;
+        document.querySelector("#favoriteInput").value = String(normalized.favoriteLevel || 0);
+        document.querySelector("#enabledInput").checked = normalized.isEnabled;
+        applyEditorReadOnlyState();
+        editorPanel.hidden = false;
+        renderImageViewer(normalized);
+        updatePreview();
+        editorPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function applyEditorReadOnlyState() {
+        editorForm.querySelectorAll("input, textarea, select").forEach((field) => {
+          if (field.id !== "editingID") field.disabled = readOnlyMode;
+        });
+      }
+
+      function saveEditor(event) {
+        event.preventDefault();
+        const id = document.querySelector("#editingID").value || crypto.randomUUID();
+        const existingIndex = payload.balloons.findIndex((balloon) => balloon.id === id);
+        const color = colorFor(document.querySelector("#colorInput").value);
+        const balloon = normalizeBalloon(existingIndex >= 0 ? payload.balloons[existingIndex] : newBalloon(id));
+        balloon.title = document.querySelector("#titleInput").value.trim();
+        balloon.text = document.querySelector("#textInput").value;
+        balloon.backText = document.querySelector("#backTextInput").value;
+        balloon.speechText = document.querySelector("#speechTextInput").value;
+        balloon.explanationText = document.querySelector("#explanationTextInput").value;
+        balloon.genreName = document.querySelector("#genreInput").value.trim() || "未分類";
+        balloon.middleCategoryName = document.querySelector("#middleCategoryInput").value.trim();
+        balloon.smallCategoryName = document.querySelector("#smallCategoryInput").value.trim();
+        balloon.colorName = color[0];
+        balloon.colorStartHex = color[1];
+        balloon.colorEndHex = color[2];
+        balloon.sizeName = document.querySelector("#sizeInput").value;
+        balloon.positionName = document.querySelector("#positionInput").value;
+        balloon.favoriteLevel = Number(document.querySelector("#favoriteInput").value || 0);
+        balloon.isFavorite = balloon.favoriteLevel > 0;
+        balloon.isEnabled = document.querySelector("#enabledInput").checked;
+        if (existingIndex >= 0) {
+          payload.balloons[existingIndex] = balloon;
+        } else {
+          payload.balloons.push(balloon);
+        }
+        editorPanel.hidden = true;
+        saveCloud("風船を保存しました");
+      }
+
+      function deleteEditingBalloon() {
+        const id = document.querySelector("#editingID").value;
+        if (!id || !window.confirm("本当に削除しますか？")) return;
+        payload.balloons = payload.balloons.filter((balloon) => balloon.id !== id);
+        editorPanel.hidden = true;
+        saveCloud("削除しました");
+      }
+
+      function updatePreview() {
+        const color = colorFor(document.querySelector("#colorInput").value);
+        const text = document.querySelector("#textInput").value.trim() || document.querySelector("#titleInput").value.trim() || "🎈";
+        const preview = document.querySelector("#previewBalloon");
+        preview.style.setProperty("--start", color[1]);
+        preview.style.setProperty("--end", color[2]);
+        preview.innerHTML = "";
+        preview.classList.remove("has-image");
+        const current = currentEditingBalloon();
+        const imageURL = current ? imageSource(current, "imageStorageURL", "imageDataURL") : "";
+        if (imageURL) {
+          const image = document.createElement("img");
+          image.src = imageURL;
+          image.alt = "";
+          preview.classList.add("has-image");
+          preview.append(image);
+        } else {
+          preview.textContent = text.slice(0, 18);
+        }
+        document.querySelector("#previewMeta").textContent = `${document.querySelector("#genreInput").value || "未分類"} / ${document.querySelector("#sizeInput").value} / ${document.querySelector("#positionInput").value}`;
+      }
+
+      function currentEditingBalloon() {
+        const id = document.querySelector("#editingID").value;
+        if (!id) return null;
+        const balloon = payload.balloons.find((item) => item.id === id);
+        return balloon ? normalizeBalloon(balloon) : null;
+      }
+
+      function renderImageViewer(balloon) {
+        const viewer = document.querySelector("#imageViewer");
+        const images = [
+          { label: "表画像", url: imageSource(balloon, "imageStorageURL", "imageDataURL") },
+          { label: "裏画像", url: imageSource(balloon, "backImageStorageURL", "backImageDataURL") },
+          { label: "自作風船デザイン", url: imageSource(balloon, "customBalloonDesignStorageURL", "customBalloonDesignDataURL") }
+        ];
+        explanationImageSources(balloon).forEach((url, index) => {
+          images.push({ label: `解説画像${index + 1}`, url });
+        });
+
+        viewer.innerHTML = "";
+        images.filter((item) => item.url).forEach((item) => {
+          const figure = document.createElement("figure");
+          const image = document.createElement("img");
+          const caption = document.createElement("figcaption");
+          image.src = item.url;
+          image.alt = item.label;
+          caption.textContent = item.label;
+          figure.append(image, caption);
+          viewer.append(figure);
+        });
+        viewer.hidden = viewer.children.length === 0;
+      }
+
+      function newBalloon(id = crypto.randomUUID()) {
+        const color = colorFor("ブルー");
+        return {
+          id,
+          itemNumber: nextItemNumber(),
+          title: "",
+          text: "",
+          speechText: "",
+          explanationText: "",
+          explanationImageDataURLs: [],
+          explanationImageStorageURLs: [],
+          imageName: null,
+          imageDataURL: null,
+          imageStorageURL: null,
+          backText: "",
+          backImageName: null,
+          backImageDataURL: null,
+          backImageStorageURL: null,
+          textFontSize: 0,
+          imageCaptionFontSize: 0,
+          imageScale: 1,
+          textOffsetX: 0,
+          textOffsetY: 0,
+          imageCaptionOffsetX: 0,
+          imageCaptionOffsetY: 0,
+          backTextFontSize: 0,
+          backImageScale: 1,
+          backTextOffsetX: 0,
+          backTextOffsetY: 0,
+          backImageCaptionOffsetX: 0,
+          backImageCaptionOffsetY: 0,
+          genreName: "未分類",
+          middleCategoryName: "",
+          smallCategoryName: "",
+          colorName: color[0],
+          colorStartHex: color[1],
+          colorEndHex: color[2],
+          customBalloonDesignDataURL: null,
+          customBalloonDesignStorageURL: null,
+          customBalloonDesignScale: 1,
+          positionName: "ランダム",
+          sizeName: "標準",
+          pausesAtMiddle: true,
+          middlePauseDuration: 15,
+          isEnabled: true,
+          isFavorite: false,
+          favoriteLevel: 0,
+          correctCount: 0,
+          incorrectCount: 0,
+          lastReviewedAt: null,
+          createdAt: nowSeconds()
+        };
+      }
+
+      function normalizePayload(value) {
+        return {
+          ...defaultPayload(),
+          ...value,
+          balloons: Array.isArray(value?.balloons) ? value.balloons.map(normalizeBalloon) : []
+        };
+      }
+
+      function normalizeBalloon(balloon) {
+        return { ...newBalloon(balloon?.id || crypto.randomUUID()), ...balloon };
+      }
+
+      function imageSource(balloon, storageKey, dataKey) {
+        return String(balloon?.[storageKey] || balloon?.[dataKey] || "").trim();
+      }
+
+      function explanationImageSources(balloon) {
+        const storageURLs = Array.isArray(balloon?.explanationImageStorageURLs) ? balloon.explanationImageStorageURLs : [];
+        const dataURLs = Array.isArray(balloon?.explanationImageDataURLs) ? balloon.explanationImageDataURLs : [];
+        return [...storageURLs, ...dataURLs].map((value) => String(value || "").trim()).filter(Boolean);
+      }
+
+      function defaultPayload() {
+        return {
+          version: 1,
+          stateModifiedAt: nowSeconds(),
+          displayInterval: 1800,
+          randomIntervalMinSeconds: 5,
+          randomIntervalMaxSeconds: 600,
+          climbSpeed: 400,
+          launchMiddlePauseDuration: 15,
+          launchPositionName: "ランダム",
+          isSpeechOutputEnabled: true,
+          speechVolume: 1,
+          activeBalloonID: null,
+          isPaused: false,
+          allStopSnapshotEnabledIDs: [],
+          balloons: []
+        };
+      }
+
+      function nextItemNumber() {
+        return Math.max(0, ...payload.balloons.map((balloon) => Number(balloon.itemNumber) || 0)) + 1;
+      }
+
+      function colorFor(name) {
+        return colors.find((color) => color[0] === name) || colors[6];
+      }
+
+      function titleFor(balloon) {
+        return balloon.title?.trim() || balloon.text?.trim() || "無題の風船";
+      }
+
+      function categoryFor(balloon) {
+        return [balloon.genreName || "未分類", balloon.middleCategoryName, balloon.smallCategoryName].filter(Boolean).join(" / ");
+      }
+
+      function contentSummary(balloon) {
+        return [balloon.text, balloon.backText, balloon.explanationText].filter(Boolean).join(" / ").slice(0, 120);
+      }
+
+      function favoriteButtonTitle(balloon) {
+        const level = Number(balloon.favoriteLevel) || 0;
+        return level === 0 ? "☆" : level === 1 ? "★" : "★2";
+      }
+
+      function setStatus(message, mode = "") {
+        statusNode.className = `status${mode ? ` ${mode}` : ""}`;
+        statusNode.textContent = message;
+      }
+
+      function nowSeconds() {
+        return Date.now() / 1000;
+      }
+
+      function formatRemoteTime(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" });
+      }
+
+      function escapeHTML(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+    </script>
+  </body>
+</html>
