@@ -665,6 +665,11 @@
       let config = loadConfig();
       let remoteUpdatedAt = "";
       let payload = defaultPayload();
+      let activeFilters = {
+        keyword: "",
+        enabled: "",
+        favorite: 0
+      };
 
       applyConfigToForm();
       bindEvents();
@@ -691,14 +696,28 @@
         });
         document.querySelector("#filterForm").addEventListener("submit", (event) => {
           event.preventDefault();
+          applyFiltersFromForm();
           renderList();
         });
         document.querySelector("#clearFilters").addEventListener("click", () => {
           document.querySelector("#keywordFilter").value = "";
           document.querySelector("#enabledFilter").value = "";
           document.querySelector("#favoriteFilter").value = "";
+          activeFilters = {
+            keyword: "",
+            enabled: "",
+            favorite: 0
+          };
           renderList();
         });
+      }
+
+      function applyFiltersFromForm() {
+        activeFilters = {
+          keyword: document.querySelector("#keywordFilter").value.trim().toLowerCase(),
+          enabled: document.querySelector("#enabledFilter").value,
+          favorite: Number(document.querySelector("#favoriteFilter").value || 0)
+        };
       }
 
       function loadConfig() {
@@ -841,9 +860,7 @@
       }
 
       function filteredBalloons() {
-        const keyword = document.querySelector("#keywordFilter").value.trim().toLowerCase();
-        const enabled = document.querySelector("#enabledFilter").value;
-        const favorite = Number(document.querySelector("#favoriteFilter").value || 0);
+        const { keyword, enabled, favorite } = activeFilters;
         return [...payload.balloons]
           .sort((a, b) => (b.itemNumber || 0) - (a.itemNumber || 0))
           .filter((balloon) => {
