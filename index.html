@@ -209,9 +209,20 @@
 
       .filters {
         display: grid;
-        grid-template-columns: minmax(180px, 1fr) 150px 150px auto;
+        grid-template-columns: minmax(180px, 1fr) 150px 150px 120px 120px;
         gap: 10px;
         align-items: end;
+      }
+
+      .search-button {
+        border-color: #f2a900;
+        background: #ffd84d;
+        color: #1d1d1f;
+        font-weight: 800;
+      }
+
+      .clear-button {
+        background: #fff;
       }
 
       .list {
@@ -584,7 +595,7 @@
         </div>
 
         <section class="panel">
-          <div class="filters">
+          <form id="filterForm" class="filters">
             <label>
               キーワード
               <input id="keywordFilter" placeholder="タイトル / 本文 / カテゴリ">
@@ -605,8 +616,9 @@
                 <option value="2">★2のみ</option>
               </select>
             </label>
-            <button id="clearFilters" type="button">解除</button>
-          </div>
+            <button id="searchFilters" class="search-button" type="submit">検索</button>
+            <button id="clearFilters" class="clear-button" type="button">クリア</button>
+          </form>
         </section>
 
         <section id="detailPanel" class="panel" hidden>
@@ -677,8 +689,9 @@
         document.querySelector("#closeDetail").addEventListener("click", () => {
           detailPanel.hidden = true;
         });
-        ["keywordFilter", "enabledFilter", "favoriteFilter"].forEach((id) => {
-          document.querySelector(`#${id}`).addEventListener("input", renderList);
+        document.querySelector("#filterForm").addEventListener("submit", (event) => {
+          event.preventDefault();
+          renderList();
         });
         document.querySelector("#clearFilters").addEventListener("click", () => {
           document.querySelector("#keywordFilter").value = "";
