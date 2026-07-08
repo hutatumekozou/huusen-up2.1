@@ -222,6 +222,18 @@
         margin-bottom: 14px;
       }
 
+      .detail-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .return-position-button {
+        border-color: var(--blue);
+        color: var(--blue);
+      }
+
       .summary {
         color: var(--muted);
         font-size: 18px;
@@ -533,6 +545,11 @@
           display: block;
         }
 
+        .detail-actions {
+          justify-content: flex-start;
+          margin-top: 12px;
+        }
+
         .marker {
           width: 100%;
         }
@@ -649,7 +666,10 @@
         <section id="detailPanel" class="panel" hidden>
           <div class="topbar">
             <h2>風船詳細</h2>
-            <button id="closeDetail" type="button">閉じる</button>
+            <div class="detail-actions">
+              <button id="returnToListPosition" class="return-position-button" type="button" disabled>元の位置に戻る</button>
+              <button id="closeDetail" type="button">閉じる</button>
+            </div>
           </div>
           <div class="preview">
             <div id="previewBalloon" class="preview-balloon" style="--start:#4da3ff;--end:#1769e0;">🎈</div>
@@ -688,10 +708,13 @@
       const toggleConfigButton = document.querySelector("#toggleConfig");
       const detailPanel = document.querySelector("#detailPanel");
       const detailFields = document.querySelector("#detailFields");
+      const returnToListPositionButton = document.querySelector("#returnToListPosition");
       const readOnlyMode = true;
       let config = loadConfig();
       let remoteUpdatedAt = "";
       let payload = defaultPayload();
+      let detailReturnElement = null;
+      let detailReturnBalloonID = "";
       let activeFilters = {
         keywords: [],
         enabled: "",
@@ -725,6 +748,7 @@
         document.querySelector("#closeDetail").addEventListener("click", () => {
           detailPanel.hidden = true;
         });
+        returnToListPositionButton.addEventListener("click", returnToDetailOrigin);
         document.querySelector("#filterForm").addEventListener("submit", (event) => {
           event.preventDefault();
           applyFiltersFromForm();
@@ -889,7 +913,9 @@
             </div>
           `;
           if (readOnlyMode) {
-            item.querySelector('[data-action="detail"]').addEventListener("click", () => openDetail(balloon));
+            const detailButton = item.querySelector('[data-action="detail"]');
+            detailButton.dataset.detailBalloonId = balloon.id;
+            detailButton.addEventListener("click", (event) => openDetail(balloon, event.currentTarget));
           } else {
             item.querySelector('[data-action="toggle"]').addEventListener("click", () => {
               balloon.isEnabled = !balloon.isEnabled;
@@ -900,7 +926,9 @@
               balloon.isFavorite = balloon.favoriteLevel > 0;
               saveCloud("お気に入りを保存しました");
             });
-            item.querySelector('[data-action="edit"]').addEventListener("click", () => openDetail(balloon));
+            const editButton = item.querySelector('[data-action="edit"]');
+            editButton.dataset.detailBalloonId = balloon.id;
+            editButton.addEventListener("click", (event) => openDetail(balloon, event.currentTarget));
           }
           listNode.append(item);
         });
@@ -922,8 +950,22 @@
           });
       }
 
-      function openDetail(balloon) {
+      function returnToDetailOrigin() {
+        const target = detailReturnElement?.isConnected
+          ? detailReturnElement
+          : [...document.querySelectorAll("[data-detail-balloon-id]")]
+              .find((element) => element.dataset.detailBalloonId === detailReturnBalloonID);
+        if (!target) return;
+
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.focus({ preventScroll: true });
+      }
+
+      function openDetail(balloon, returnElement = null) {
         const normalized = normalizeBalloon(balloon);
+        detailReturnElement = returnElement;
+        detailReturnBalloonID = String(normalized.id || "");
+        returnToListPositionButton.disabled = !detailReturnElement && !detailReturnBalloonID;
         detailPanel.hidden = false;
         renderImageViewer(normalized);
         renderDetailPreview(normalized);
