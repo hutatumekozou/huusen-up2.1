@@ -329,6 +329,8 @@
         font-weight: 800;
         line-height: 1;
         cursor: pointer;
+        touch-action: manipulation;
+        user-select: none;
         box-shadow: 0 2px 6px rgba(138, 90, 0, 0.14);
       }
 
@@ -1089,10 +1091,35 @@
       }
 
       function incrementCheckCount(balloon) {
-        const key = checkCountKey(balloon);
         const nextCount = checkCountFor(balloon) + 1;
-        checkCounts[key] = nextCount;
+        setCheckCount(balloon, nextCount);
+        return nextCount;
+      }
+
+      function setCheckCount(balloon, count) {
+        const key = checkCountKey(balloon);
+        checkCounts[key] = count;
         localStorage.setItem(checkCountStorageKey, JSON.stringify(checkCounts));
+      }
+
+      function updateCheckCountButton(button, balloon, count) {
+        button.classList.toggle("checked", count > 0);
+        button.querySelector(".check-count-value").textContent = count;
+        button.setAttribute("aria-label", `品番 ${balloon.itemNumber || "-"} をチェック。現在 ${count} 回`);
+      }
+
+      function editCheckCount(balloon) {
+        const currentCount = checkCountFor(balloon);
+        const value = window.prompt("チェック回数を入力してください", String(currentCount));
+        if (value === null) return null;
+
+        const nextCount = Number(value.trim());
+        if (!Number.isSafeInteger(nextCount) || nextCount < 0) {
+          window.alert("0以上の整数を入力してください。");
+          return null;
+        }
+
+        setCheckCount(balloon, nextCount);
         return nextCount;
       }
 
@@ -1222,11 +1249,32 @@
             });
           }
           const checkCountButton = item.querySelector('[data-action="check-count"]');
+          let longPressTimer = null;
+          let ignoreClickUntil = 0;
+          const cancelLongPress = () => {
+            if (longPressTimer !== null) {
+              window.clearTimeout(longPressTimer);
+              longPressTimer = null;
+            }
+          };
+          checkCountButton.addEventListener("pointerdown", (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            cancelLongPress();
+            longPressTimer = window.setTimeout(() => {
+              longPressTimer = null;
+              const count = editCheckCount(balloon);
+              if (count !== null) updateCheckCountButton(checkCountButton, balloon, count);
+              ignoreClickUntil = Date.now() + 800;
+            }, 600);
+          });
+          ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
+            checkCountButton.addEventListener(eventName, cancelLongPress);
+          });
+          checkCountButton.addEventListener("contextmenu", (event) => event.preventDefault());
           checkCountButton.addEventListener("click", () => {
+            if (Date.now() < ignoreClickUntil) return;
             const count = incrementCheckCount(balloon);
-            checkCountButton.classList.toggle("checked", count > 0);
-            checkCountButton.querySelector(".check-count-value").textContent = count;
-            checkCountButton.setAttribute("aria-label", `品番 ${balloon.itemNumber || "-"} をチェック。現在 ${count} 回`);
+            updateCheckCountButton(checkCountButton, balloon, count);
           });
           if (readOnlyMode) {
             const detailButton = item.querySelector('[data-action="detail"]');
