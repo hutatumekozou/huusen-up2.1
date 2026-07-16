@@ -1299,24 +1299,20 @@
       }
 
       function renderDetailFields(balloon) {
-        const favoriteLevel = Number(balloon.favoriteLevel) || 0;
+        const category = [
+          balloon.genreName || "未分類",
+          balloon.middleCategoryName || "未設定",
+          balloon.smallCategoryName || "未設定"
+        ].join(" → ");
+        const sellingPrice = normalizedSellingPrice(balloon.sellingPrice);
         const fields = [
           ["タイトル", titleFor(balloon)],
-          ["大カテゴリ", balloon.genreName || "未分類"],
-          ["中カテゴリ", balloon.middleCategoryName || "未設定"],
-          ["小カテゴリ", balloon.smallCategoryName || "未設定"],
-          ["状態", balloon.isEnabled ? "稼働中" : "停止中"],
-          ["お気に入り", favoriteLevel > 0 ? "★".repeat(favoriteLevel) : "なし"],
-          ["売値", normalizedSellingPrice(balloon.sellingPrice) === null ? "なし" : `${normalizedSellingPrice(balloon.sellingPrice).toLocaleString("ja-JP")}円`],
-          ["色 / サイズ / 表示位置", `${balloon.colorName || "ブルー"} / ${balloon.sizeName || "標準"} / ${balloon.positionName || "ランダム"}`],
-          ["正解 / 不正解", `${Number(balloon.correctCount) || 0} / ${Number(balloon.incorrectCount) || 0}`],
-          ["表の文字", balloon.text || "なし"],
-          ["裏の文字", balloon.backText || "なし"],
-          ["音声出力文字", balloon.speechText || "なし"],
-          ["解説", balloon.explanationText || "なし"]
+          ["解説", balloon.explanationText || "なし"],
+          ["カテゴリ", category],
+          ["売値", sellingPrice === null ? "なし" : `${sellingPrice.toLocaleString("ja-JP")}円`]
         ];
         detailFields.innerHTML = fields.map(([label, value]) => `
-          <div class="detail-card${["表の文字", "裏の文字", "音声出力文字", "解説"].includes(label) ? " full" : ""}">
+          <div class="detail-card full">
             <span class="detail-label">${escapeHTML(label)}</span>
             <p class="detail-value">${escapeHTML(value)}</p>
           </div>
