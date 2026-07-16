@@ -299,9 +299,148 @@
       .dot {
         width: 42px;
         height: 42px;
+        display: grid;
+        place-items: center;
         border-radius: 50%;
         background: linear-gradient(135deg, var(--start), var(--end));
         box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
+        overflow: hidden;
+      }
+
+      button.dot {
+        min-height: 42px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: zoom-in;
+      }
+
+      .dot.balloon-preview {
+        position: relative;
+        overflow: visible;
+        color: #fff;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .dot.balloon-preview:focus-visible {
+        outline: 3px solid rgba(23, 105, 224, 0.35);
+        outline-offset: 3px;
+      }
+
+      .balloon-preview-body {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+      }
+
+      .balloon-preview-body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--item-color-start), var(--item-color-end));
+        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.18);
+      }
+
+      .balloon-preview-body::after {
+        content: "";
+        position: absolute;
+        left: 21%;
+        top: 18%;
+        z-index: 1;
+        width: 22%;
+        height: 22%;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.35);
+        pointer-events: none;
+      }
+
+      .balloon-preview.custom-balloon-design .balloon-preview-body::before {
+        background-image: var(--item-custom-balloon-design-image);
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
+        box-shadow: none;
+        transform: scale(var(--item-custom-balloon-design-scale, 1));
+      }
+
+      .balloon-preview.custom-balloon-design .balloon-preview-body::after {
+        display: none;
+      }
+
+      .front-preview-content {
+        position: relative;
+        z-index: 2;
+        width: 82%;
+        height: 82%;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        overflow: hidden;
+      }
+
+      .front-preview-stack {
+        position: relative;
+        isolation: isolate;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        overflow: hidden;
+        --item-image-max-height: 82%;
+      }
+
+      .front-preview-stack.has-caption {
+        --item-image-max-height: 62%;
+        --item-image-top-inset: 3px;
+      }
+
+      .front-preview-stack.many-caption-lines {
+        --item-image-max-height: 48%;
+      }
+
+      .front-preview-stack img,
+      .front-preview-caption {
+        grid-area: 1 / 1;
+      }
+
+      .front-preview-stack img {
+        position: relative;
+        z-index: 1;
+        display: block;
+        max-width: calc(82% * var(--item-image-scale, 1));
+        max-height: calc(var(--item-image-max-height, 82%) * var(--item-image-scale, 1));
+        object-fit: contain;
+        transform: translate(var(--item-image-offset-x, 0px), calc(var(--item-image-top-inset, 0px) + var(--item-image-offset-y, 0px)));
+      }
+
+      .front-preview-caption {
+        position: relative;
+        z-index: 2;
+        align-self: start;
+        justify-self: center;
+        width: 92%;
+        height: 26%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 5px;
+        font-weight: 800;
+        line-height: 1;
+        text-align: center;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+        transform: translate(var(--item-text-offset-x, 0px), var(--item-text-offset-y, 0px));
+        pointer-events: none;
       }
 
       .item.disabled .dot {
@@ -493,6 +632,69 @@
         font-weight: 800;
       }
 
+      .image-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.62);
+      }
+
+      .image-modal.open {
+        display: flex;
+      }
+
+      .image-modal-panel {
+        width: min(980px, 94vw);
+        max-height: 90vh;
+        min-height: min(720px, 82vh);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 12px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.86);
+        padding: 16px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+      }
+
+      .image-modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .image-modal-head h2 {
+        color: #fff;
+        font-size: 18px;
+      }
+
+      .image-modal-head button {
+        border-color: rgba(255, 255, 255, 0.48);
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+      }
+
+      .image-modal-body {
+        min-height: 360px;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 8px;
+        background: #050505;
+      }
+
+      .image-modal-body img {
+        display: block;
+        max-width: 100%;
+        max-height: 70vh;
+        object-fit: contain;
+      }
+
       .empty {
         border: 1px dashed #c7cbd1;
         border-radius: 8px;
@@ -658,6 +860,10 @@
                 <option value="2">★2のみ</option>
               </select>
             </label>
+            <label>
+              売値（円以上）
+              <input id="minimumSellingPriceFilter" type="number" min="0" step="1" inputmode="numeric" placeholder="例: 10000">
+            </label>
             <button id="searchFilters" class="search-button" type="submit">検索</button>
             <button id="clearFilters" class="clear-button" type="button">クリア</button>
           </form>
@@ -681,6 +887,18 @@
 
         <div id="list" class="list"></div>
       </main>
+    </div>
+
+    <div id="imageModal" class="image-modal" aria-hidden="true">
+      <div class="image-modal-panel" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle">
+        <div class="image-modal-head">
+          <h2 id="imageModalTitle">表画像</h2>
+          <button id="closeImageModal" type="button">閉じる</button>
+        </div>
+        <div class="image-modal-body">
+          <img id="imageModalImage" alt="表画像のプレビュー">
+        </div>
+      </div>
     </div>
 
     <script>
@@ -709,6 +927,9 @@
       const detailPanel = document.querySelector("#detailPanel");
       const detailFields = document.querySelector("#detailFields");
       const returnToListPositionButton = document.querySelector("#returnToListPosition");
+      const imageModal = document.querySelector("#imageModal");
+      const imageModalTitle = document.querySelector("#imageModalTitle");
+      const imageModalImage = document.querySelector("#imageModalImage");
       const readOnlyMode = true;
       let config = loadConfig();
       let remoteUpdatedAt = "";
@@ -718,7 +939,8 @@
       let activeFilters = {
         keywords: [],
         enabled: "",
-        favorite: 0
+        favorite: 0,
+        minimumSellingPrice: null
       };
 
       applyConfigToForm();
@@ -749,6 +971,13 @@
           detailPanel.hidden = true;
         });
         returnToListPositionButton.addEventListener("click", returnToDetailOrigin);
+        document.querySelector("#closeImageModal").addEventListener("click", closeImageModal);
+        imageModal.addEventListener("click", (event) => {
+          if (event.target === imageModal) closeImageModal();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeImageModal();
+        });
         document.querySelector("#filterForm").addEventListener("submit", (event) => {
           event.preventDefault();
           applyFiltersFromForm();
@@ -758,10 +987,12 @@
           document.querySelector("#keywordFilter").value = "";
           document.querySelector("#enabledFilter").value = "";
           document.querySelector("#favoriteFilter").value = "";
+          document.querySelector("#minimumSellingPriceFilter").value = "";
           activeFilters = {
             keywords: [],
             enabled: "",
-            favorite: 0
+            favorite: 0,
+            minimumSellingPrice: null
           };
           renderList();
         });
@@ -777,7 +1008,8 @@
         activeFilters = {
           keywords: searchKeywords(document.querySelector("#keywordFilter").value),
           enabled: document.querySelector("#enabledFilter").value,
-          favorite: Number(document.querySelector("#favoriteFilter").value || 0)
+          favorite: Number(document.querySelector("#favoriteFilter").value || 0),
+          minimumSellingPrice: normalizedSellingPrice(document.querySelector("#minimumSellingPriceFilter").value)
         };
       }
 
@@ -889,12 +1121,13 @@
         }
         balloons.forEach((balloon) => {
           const color = colorFor(balloon.colorName);
+          const frontImageURL = imageSource(balloon, "imageStorageURL", "imageDataURL");
           const item = document.createElement("article");
           item.className = `item${balloon.isEnabled ? "" : " disabled"}`;
           item.innerHTML = `
             <div class="marker">
               <span class="number">品番 ${balloon.itemNumber || "-"}</span>
-              <span class="dot" style="--start:${color[1]};--end:${color[2]}"></span>
+              ${frontImageURL ? listBalloonPreviewHTML(balloon, color, frontImageURL) : `<span class="dot" style="--start:${color[1]};--end:${color[2]}"></span>`}
             </div>
             <div class="item-body">
               <div class="title-row">
@@ -912,6 +1145,13 @@
                   <button type="button" data-action="edit">編集</button>`}
             </div>
           `;
+          if (frontImageURL) {
+            const previewButton = item.querySelector('[data-action="preview-front-image"]');
+            previewButton.setAttribute("aria-label", `品番 ${balloon.itemNumber || "-"} の表画像を拡大表示`);
+            previewButton.addEventListener("click", () => {
+              openImageModal(`表画像（品番 ${balloon.itemNumber || "-"}）`, frontImageURL);
+            });
+          }
           if (readOnlyMode) {
             const detailButton = item.querySelector('[data-action="detail"]');
             detailButton.dataset.detailBalloonId = balloon.id;
@@ -934,14 +1174,78 @@
         });
       }
 
+      function listBalloonPreviewHTML(balloon, color, frontImageURL) {
+        const caption = frontImageCaption(balloon);
+        const captionLineCount = Math.max(1, caption.split(/\r\n|\r|\n/).length);
+        const captionClass = caption ? ` has-caption${captionLineCount > 2 ? " many-caption-lines" : ""}` : "";
+        const customDesignURL = imageSource(balloon, "customBalloonDesignStorageURL", "customBalloonDesignDataURL");
+        const isCustomDesign = balloon.colorName === "自作デザイン" && customDesignURL;
+        const customClass = isCustomDesign ? " custom-balloon-design" : "";
+        const customStyle = isCustomDesign
+          ? ` --item-custom-balloon-design-image: url(&quot;${escapeHTML(customDesignURL)}&quot;); --item-custom-balloon-design-scale: ${clampNumber(balloon.customBalloonDesignScale, 0.5, 2.5).toFixed(1)};`
+          : "";
+        const style = [
+          `--item-color-start:${color[1]}`,
+          `--item-color-end:${color[2]}`,
+          `--item-image-scale:${clampNumber(balloon.imageScale, 0.6, 2).toFixed(1)}`,
+          `--item-image-offset-x:${listPreviewOffset(balloon.imageCaptionOffsetX)}`,
+          `--item-image-offset-y:${listPreviewOffset(balloon.imageCaptionOffsetY)}`,
+          `--item-text-offset-x:${listPreviewOffset(balloon.textOffsetX)}`,
+          `--item-text-offset-y:${listPreviewOffset(balloon.textOffsetY)}`
+        ].join(";") + `;${customStyle}`;
+
+        return `
+          <button type="button" class="dot balloon-preview${customClass}" style="${style}" data-action="preview-front-image">
+            <span class="balloon-preview-body">
+              <span class="front-preview-content">
+                <span class="front-preview-stack${captionClass}">
+                  ${caption ? `<span class="front-preview-caption">${escapeHTML(caption)}</span>` : ""}
+                  <img src="${escapeHTML(frontImageURL)}" alt="">
+                </span>
+              </span>
+            </span>
+          </button>
+        `;
+      }
+
+      function frontImageCaption(balloon) {
+        const caption = String(balloon.text || "").trim();
+        if (caption && caption !== "🎈") return caption;
+        return String(balloon.imageName || "").trim();
+      }
+
+      function listPreviewOffset(value) {
+        return `${(clampNumber(value, -0.45, 0.45) * 36).toFixed(2)}px`;
+      }
+
+      function clampNumber(value, min, max) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return min <= 0 && max >= 0 ? 0 : min;
+        return Math.min(max, Math.max(min, number));
+      }
+
+      function openImageModal(title, imageURL) {
+        imageModalTitle.textContent = title;
+        imageModalImage.src = imageURL;
+        imageModal.classList.add("open");
+        imageModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeImageModal() {
+        imageModal.classList.remove("open");
+        imageModal.setAttribute("aria-hidden", "true");
+        imageModalImage.removeAttribute("src");
+      }
+
       function filteredBalloons() {
-        const { keywords = [], enabled, favorite } = activeFilters;
+        const { keywords = [], enabled, favorite, minimumSellingPrice } = activeFilters;
         return [...payload.balloons]
           .sort((a, b) => (b.itemNumber || 0) - (a.itemNumber || 0))
           .filter((balloon) => {
             if (enabled === "enabled" && !balloon.isEnabled) return false;
             if (enabled === "disabled" && balloon.isEnabled) return false;
             if (favorite && (balloon.favoriteLevel || 0) < favorite) return false;
+            if (minimumSellingPrice !== null && (normalizedSellingPrice(balloon.sellingPrice) ?? -1) < minimumSellingPrice) return false;
             if (keywords.length === 0) return true;
             const searchableText = [balloon.title, balloon.text, balloon.backText, balloon.explanationText, balloon.genreName, balloon.middleCategoryName, balloon.smallCategoryName]
               .join(" ")
@@ -1003,6 +1307,7 @@
           ["小カテゴリ", balloon.smallCategoryName || "未設定"],
           ["状態", balloon.isEnabled ? "稼働中" : "停止中"],
           ["お気に入り", favoriteLevel > 0 ? "★".repeat(favoriteLevel) : "なし"],
+          ["売値", normalizedSellingPrice(balloon.sellingPrice) === null ? "なし" : `${normalizedSellingPrice(balloon.sellingPrice).toLocaleString("ja-JP")}円`],
           ["色 / サイズ / 表示位置", `${balloon.colorName || "ブルー"} / ${balloon.sizeName || "標準"} / ${balloon.positionName || "ランダム"}`],
           ["正解 / 不正解", `${Number(balloon.correctCount) || 0} / ${Number(balloon.incorrectCount) || 0}`],
           ["表の文字", balloon.text || "なし"],
@@ -1085,6 +1390,7 @@
           customBalloonDesignScale: 1,
           positionName: "ランダム",
           sizeName: "標準",
+          sellingPrice: null,
           pausesAtMiddle: true,
           middlePauseDuration: 15,
           isEnabled: true,
@@ -1106,7 +1412,18 @@
       }
 
       function normalizeBalloon(balloon) {
-        return { ...newBalloon(balloon?.id || crypto.randomUUID()), ...balloon };
+        return {
+          ...newBalloon(balloon?.id || crypto.randomUUID()),
+          ...balloon,
+          sellingPrice: normalizedSellingPrice(balloon?.sellingPrice)
+        };
+      }
+
+      function normalizedSellingPrice(value) {
+        const text = String(value ?? "").trim();
+        if (!text) return null;
+        const price = Number(text);
+        return Number.isInteger(price) && price >= 0 ? price : null;
       }
 
       function imageSource(balloon, storageKey, dataKey) {
@@ -1170,6 +1487,7 @@
           balloon.colorName || "ブルー",
           balloon.positionName || "ランダム",
           balloon.sizeName || "標準",
+          normalizedSellingPrice(balloon.sellingPrice) === null ? "売値なし" : `売値 ${normalizedSellingPrice(balloon.sellingPrice).toLocaleString("ja-JP")}円`,
           pauseText,
           hasBack ? "裏あり" : "裏なし",
           hasFrontImage ? "表: 添付画像" : "表: 文字"
