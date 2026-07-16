@@ -1468,30 +1468,16 @@
       }
 
       function listMeta(balloon) {
-        const favoriteLevel = Number(balloon.favoriteLevel) || 0;
-        const favoriteText = favoriteLevel > 0 ? "★".repeat(favoriteLevel) : "なし";
-        const middlePauseDuration = Number(balloon.middlePauseDuration) || 0;
-        const pauseText = balloon.pausesAtMiddle
-          ? `中央停止 ${middlePauseDuration.toFixed(1)}秒`
-          : "中央停止なし";
-        const hasBack = Boolean((balloon.backText || "").trim() || imageSource(balloon, "backImageStorageURL", "backImageDataURL"));
-        const hasFrontImage = Boolean(imageSource(balloon, "imageStorageURL", "imageDataURL"));
-        return [
-          balloon.smallCategoryName || balloon.middleCategoryName || balloon.genreName || "未分類",
-          `正解 ${Number(balloon.correctCount) || 0}`,
-          `不正解 ${Number(balloon.incorrectCount) || 0}`,
-          balloon.colorName || "ブルー",
-          balloon.positionName || "ランダム",
-          balloon.sizeName || "標準",
-          normalizedSellingPrice(balloon.sellingPrice) === null ? "売値なし" : `売値 ${normalizedSellingPrice(balloon.sellingPrice).toLocaleString("ja-JP")}円`,
-          pauseText,
-          hasBack ? "裏あり" : "裏なし",
-          hasFrontImage ? "表: 添付画像" : "表: 文字"
-        ].join(" / ");
+        return balloon.smallCategoryName || balloon.middleCategoryName || balloon.genreName || "未分類";
       }
 
       function contentSummary(balloon) {
-        return [balloon.text, balloon.backText, balloon.explanationText].filter(Boolean).join(" / ").slice(0, 120);
+        const explanation = String(balloon.explanationText || "").trim();
+        const fallback = [balloon.text, balloon.backText].filter(Boolean).join(" / ");
+        return (explanation || fallback)
+          .replace(/^[\s\S]*?Claudeが回答しました[：:]\s*/u, "")
+          .trim()
+          .slice(0, 120);
       }
 
       function favoriteButtonTitle(balloon) {
