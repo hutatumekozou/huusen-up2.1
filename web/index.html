@@ -3,23 +3,28 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>huusen-up</title>
-    <meta name="description" content="huusen-up は、メモや学習内容を風船のように画面へ浮かべる macOS アプリです。">
+    <title>huusen-up cloud</title>
+    <meta name="description" content="huusen-up のクラウド管理画面">
     <style>
       :root {
         color-scheme: light;
-        --ink: #18181b;
+        --ink: #1d1d1f;
         --muted: #62646a;
-        --line: #dedfe4;
-        --paper: #fbfbfc;
+        --line: #dfe2e8;
+        --paper: #f6f7f9;
+        --panel: #ffffff;
         --blue: #1769e0;
-        --rose: #e5486b;
-        --amber: #f2a51a;
-        --mint: #18a77b;
+        --danger: #d93025;
+        --ok: #15803d;
+        --soft: #eef2f7;
       }
 
       * {
         box-sizing: border-box;
+      }
+
+      [hidden] {
+        display: none !important;
       }
 
       body {
@@ -30,291 +35,1498 @@
         color: var(--ink);
       }
 
-      main {
-        min-height: 100vh;
-        display: grid;
-        grid-template-columns: minmax(320px, 0.95fr) minmax(360px, 1.05fr);
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
       }
 
-      .intro {
-        display: flex;
-        flex-direction: column;
+      button,
+      .button {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
         justify-content: center;
-        gap: 28px;
-        padding: clamp(32px, 6vw, 86px);
-        border-right: 1px solid var(--line);
+        gap: 6px;
+        border: 1px solid #b8bdc6;
+        border-radius: 6px;
+        padding: 0 12px;
         background: #fff;
+        color: var(--ink);
+        text-decoration: none;
+        cursor: pointer;
+        font-weight: 700;
       }
 
-      .mark {
-        width: 58px;
-        height: 58px;
+      button.primary {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: #fff;
+      }
+
+      button.danger {
+        border-color: var(--danger);
+        background: var(--danger);
+        color: #fff;
+      }
+
+      button:disabled {
+        color: #9aa0a6;
+        background: #f1f3f5;
+        cursor: default;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid #c7cbd1;
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink);
+      }
+
+      input,
+      select {
+        height: 44px;
+        padding: 0 12px;
+      }
+
+      textarea {
+        min-height: 108px;
+        padding: 12px;
+        resize: vertical;
+        line-height: 1.45;
+      }
+
+      label {
         display: grid;
-        place-items: center;
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        font-size: 31px;
+        gap: 8px;
+        min-width: 0;
+        color: #3c4043;
+        font-size: 15px;
+      }
+
+      .app {
+        width: min(100%, 920px);
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 24px 18px 44px;
+      }
+
+      aside {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+
+      main {
+        min-width: 0;
+        padding: 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
       }
 
       h1 {
         margin: 0;
-        font-size: clamp(42px, 7vw, 84px);
-        line-height: 0.95;
+        font-size: 28px;
         letter-spacing: 0;
       }
 
-      p {
-        max-width: 560px;
+      h2 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      .panel {
+        display: grid;
+        gap: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 18px;
+        margin-bottom: 14px;
+      }
+
+      .config-form {
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .compact-button {
+        min-height: 34px;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+
+      .collapsible[hidden] {
+        display: none;
+      }
+
+      .hint {
         margin: 0;
         color: var(--muted);
-        font-size: clamp(17px, 2vw, 21px);
-        line-height: 1.75;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .status {
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 6px;
+        background: var(--soft);
+        padding: 8px 10px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.35;
+      }
+
+      .status.ok {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status.error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+
+      .detail-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .return-position-button {
+        border-color: var(--blue);
+        color: var(--blue);
+      }
+
+      .summary {
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.45;
+      }
+
+      .filters {
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) 150px 150px 120px 120px;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .search-button {
+        border-color: #f2a900;
+        background: #ffd84d;
+        color: #1d1d1f;
+        font-weight: 800;
+      }
+
+      .clear-button {
+        background: #fff;
+      }
+
+      .list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .item {
+        display: block;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 18px;
+      }
+
+      .item.disabled {
+        background: #f8f9fb;
+      }
+
+      .marker {
+        display: grid;
+        gap: 10px;
+        place-items: center;
+        margin: 0 auto 14px;
+      }
+
+      .number {
+        min-width: 72px;
+        min-height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #1d4ed8;
+        padding: 0 8px;
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .dot {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--start), var(--end));
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
+        overflow: hidden;
+      }
+
+      button.dot {
+        min-height: 42px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: zoom-in;
+      }
+
+      .dot.balloon-preview {
+        position: relative;
+        overflow: visible;
+        color: #fff;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .dot.balloon-preview:focus-visible {
+        outline: 3px solid rgba(23, 105, 224, 0.35);
+        outline-offset: 3px;
+      }
+
+      .balloon-preview-body {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+      }
+
+      .balloon-preview-body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--item-color-start), var(--item-color-end));
+        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.18);
+      }
+
+      .balloon-preview-body::after {
+        content: "";
+        position: absolute;
+        left: 21%;
+        top: 18%;
+        z-index: 1;
+        width: 22%;
+        height: 22%;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.35);
+        pointer-events: none;
+      }
+
+      .balloon-preview.custom-balloon-design .balloon-preview-body::before {
+        background-image: var(--item-custom-balloon-design-image);
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
+        box-shadow: none;
+        transform: scale(var(--item-custom-balloon-design-scale, 1));
+      }
+
+      .balloon-preview.custom-balloon-design .balloon-preview-body::after {
+        display: none;
+      }
+
+      .front-preview-content {
+        position: relative;
+        z-index: 2;
+        width: 82%;
+        height: 82%;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        overflow: hidden;
+      }
+
+      .front-preview-stack {
+        position: relative;
+        isolation: isolate;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        overflow: hidden;
+        --item-image-max-height: 82%;
+      }
+
+      .front-preview-stack.has-caption {
+        --item-image-max-height: 62%;
+        --item-image-top-inset: 3px;
+      }
+
+      .front-preview-stack.many-caption-lines {
+        --item-image-max-height: 48%;
+      }
+
+      .front-preview-stack img,
+      .front-preview-caption {
+        grid-area: 1 / 1;
+      }
+
+      .front-preview-stack img {
+        position: relative;
+        z-index: 1;
+        display: block;
+        max-width: calc(82% * var(--item-image-scale, 1));
+        max-height: calc(var(--item-image-max-height, 82%) * var(--item-image-scale, 1));
+        object-fit: contain;
+        transform: translate(var(--item-image-offset-x, 0px), calc(var(--item-image-top-inset, 0px) + var(--item-image-offset-y, 0px)));
+      }
+
+      .front-preview-caption {
+        position: relative;
+        z-index: 2;
+        align-self: start;
+        justify-self: center;
+        width: 92%;
+        height: 26%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 5px;
+        font-weight: 800;
+        line-height: 1;
+        text-align: center;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+        transform: translate(var(--item-text-offset-x, 0px), var(--item-text-offset-y, 0px));
+        pointer-events: none;
+      }
+
+      .item.disabled .dot {
+        filter: grayscale(1);
+        opacity: 0.45;
+      }
+
+      .title-row {
+        display: flex;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .title {
+        margin: 0;
+        min-width: min(100%, 260px);
+        overflow-wrap: anywhere;
+        font-weight: 800;
+        font-size: 22px;
+        line-height: 1.35;
+      }
+
+      .pill {
+        min-height: 28px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: #dcfce7;
+        color: #166534;
+        padding: 0 8px;
+        font-size: 15px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .pill.off {
+        background: #eef0f3;
+        color: #5f6368;
+      }
+
+      .meta {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
+      .excerpt {
+        margin: 8px 0 0;
+        color: #4f5661;
+        font-size: 17px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .excerpt:empty {
+        display: none;
       }
 
       .actions {
         display: flex;
         flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .item .actions button {
+        min-width: 92px;
+        min-height: 44px;
+        font-size: 16px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
       }
 
-      a {
-        color: inherit;
+      .detail-card {
+        display: grid;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 12px;
       }
 
-      .button {
-        display: inline-flex;
+      .detail-label {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .detail-value {
+        margin: 0;
+        color: var(--ink);
+        font-size: 16px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .full {
+        grid-column: 1 / -1;
+      }
+
+      .checkline {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-size: 16px;
+      }
+
+      .checkline input {
+        width: 18px;
+        height: 18px;
+        padding: 0;
+      }
+
+      .preview {
+        min-height: 110px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fafc;
+        padding: 12px;
+      }
+
+      .preview-balloon {
+        width: 86px;
+        height: 86px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--start), var(--end));
+        color: #fff;
+        text-align: center;
+        padding: 8px;
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+
+      .preview-balloon.has-image {
+        overflow: hidden;
+        padding: 0;
+        background: #fff;
+      }
+
+      .preview-balloon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .image-viewer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+
+      .image-viewer figure {
+        margin: 0;
+        display: grid;
+        gap: 6px;
+      }
+
+      .image-viewer img {
+        width: 100%;
+        max-height: 220px;
+        object-fit: contain;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .image-viewer figcaption {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .image-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: none;
         align-items: center;
         justify-content: center;
-        min-height: 46px;
-        padding: 0 18px;
-        border: 1px solid var(--ink);
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.62);
+      }
+
+      .image-modal.open {
+        display: flex;
+      }
+
+      .image-modal-panel {
+        width: min(980px, 94vw);
+        max-height: 90vh;
+        min-height: min(720px, 82vh);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 12px;
         border-radius: 8px;
-        text-decoration: none;
-        font-weight: 700;
+        background: rgba(0, 0, 0, 0.86);
+        padding: 16px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
       }
 
-      .button.primary {
-        background: var(--ink);
-        color: #fff;
-      }
-
-      .stage {
-        position: relative;
-        min-height: 100vh;
-        overflow: hidden;
-        background:
-          linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.18)),
-          repeating-linear-gradient(90deg, transparent 0 58px, rgba(0,0,0,0.035) 58px 59px),
-          linear-gradient(150deg, #dff3ff 0%, #fff5da 52%, #f7e8ee 100%);
-      }
-
-      .toolbar {
-        position: absolute;
-        top: 24px;
-        left: 24px;
-        right: 24px;
-        z-index: 3;
+      .image-modal-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 12px;
-        border: 1px solid rgba(24, 24, 27, 0.12);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.78);
-        backdrop-filter: blur(14px);
       }
 
-      .toolbar strong {
-        font-size: 15px;
-      }
-
-      .status {
-        color: var(--muted);
-        font-size: 13px;
-      }
-
-      .balloon {
-        position: absolute;
-        bottom: -170px;
-        width: 112px;
-        height: 144px;
-        display: grid;
-        place-items: start center;
-        animation: floatUp var(--duration) linear infinite;
-        animation-delay: var(--delay);
-      }
-
-      .balloon::before {
-        content: "";
-        width: 96px;
-        height: 96px;
-        border-radius: 999px 999px 920px 920px;
-        background: linear-gradient(135deg, var(--start), var(--end));
-        box-shadow: 0 16px 30px rgba(24, 24, 27, 0.18);
-      }
-
-      .balloon::after {
-        content: "";
-        position: absolute;
-        top: 96px;
-        width: 1px;
-        height: 48px;
-        background: rgba(24, 24, 27, 0.35);
-      }
-
-      .balloon span {
-        position: absolute;
-        top: 31px;
-        width: 78px;
+      .image-modal-head h2 {
         color: #fff;
-        text-align: center;
-        font-weight: 800;
-        font-size: 15px;
-        line-height: 1.25;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+        font-size: 18px;
       }
 
-      .b1 {
-        left: 12%;
-        --start: #4c8dff;
-        --end: var(--blue);
-        --duration: 14s;
-        --delay: -8s;
+      .image-modal-head button {
+        border-color: rgba(255, 255, 255, 0.48);
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
       }
 
-      .b2 {
-        left: 42%;
-        --start: #ff8da4;
-        --end: var(--rose);
-        --duration: 18s;
-        --delay: -3s;
-      }
-
-      .b3 {
-        left: 68%;
-        --start: #ffcf6b;
-        --end: var(--amber);
-        --duration: 16s;
-        --delay: -11s;
-      }
-
-      .b4 {
-        left: 28%;
-        --start: #5adbb6;
-        --end: var(--mint);
-        --duration: 20s;
-        --delay: -14s;
-      }
-
-      .dock {
-        position: absolute;
-        left: 24px;
-        right: 24px;
-        bottom: 24px;
-        z-index: 3;
+      .image-modal-body {
+        min-height: 360px;
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-      }
-
-      .tile {
-        min-height: 84px;
-        padding: 14px;
-        border: 1px solid rgba(24, 24, 27, 0.12);
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.16);
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.8);
-        backdrop-filter: blur(14px);
+        background: #050505;
       }
 
-      .tile strong {
+      .image-modal-body img {
         display: block;
-        margin-bottom: 6px;
-        font-size: 14px;
+        max-width: 100%;
+        max-height: 70vh;
+        object-fit: contain;
       }
 
-      .tile small {
+      .empty {
+        border: 1px dashed #c7cbd1;
+        border-radius: 8px;
+        background: #fff;
+        padding: 26px;
         color: var(--muted);
-        line-height: 1.45;
+        text-align: center;
       }
 
-      @keyframes floatUp {
-        from {
-          transform: translate3d(0, 0, 0) rotate(-2deg);
+      @media (max-width: 860px) {
+        .app {
+          padding: 16px 12px 34px;
         }
-        50% {
-          transform: translate3d(24px, -52vh, 0) rotate(3deg);
-        }
-        to {
-          transform: translate3d(-18px, -112vh, 0) rotate(-2deg);
-        }
-      }
 
-      @media (max-width: 820px) {
-        main {
+        h1 {
+          font-size: 26px;
+        }
+
+        h2 {
+          font-size: 30px;
+          line-height: 1.25;
+        }
+
+        label {
+          font-size: 18px;
+        }
+
+        input,
+        select {
+          height: 58px;
+          font-size: 22px;
+        }
+
+        textarea {
+          font-size: 19px;
+        }
+
+        button,
+        .button {
+          min-height: 58px;
+          padding: 0 18px;
+          font-size: 22px;
+        }
+
+        .panel {
+          padding: 18px;
+        }
+
+        .topbar {
+          display: block;
+        }
+
+        .detail-actions {
+          justify-content: flex-start;
+          margin-top: 12px;
+        }
+
+        .marker {
+          width: 100%;
+        }
+
+        .item {
+          padding: 22px 20px;
+        }
+
+        .title {
+          font-size: 25px;
+        }
+
+        .meta {
+          font-size: 22px;
+        }
+
+        .excerpt {
+          font-size: 20px;
+        }
+
+        .item .actions button {
+          flex: 1 1 130px;
+          min-height: 58px;
+          font-size: 22px;
+        }
+
+        .filters,
+        .detail-grid {
           grid-template-columns: 1fr;
         }
 
-        .intro {
-          min-height: 48vh;
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
-        }
-
-        .stage {
-          min-height: 52vh;
-        }
-
-        .dock {
-          grid-template-columns: 1fr;
-        }
-
-        .tile {
-          min-height: auto;
+        .full {
+          grid-column: 1;
         }
       }
     </style>
   </head>
   <body>
-    <main>
-      <section class="intro" aria-label="huusen-up">
-        <div class="mark" aria-hidden="true">🎈</div>
-        <div>
+    <div class="app">
+      <aside>
+        <div class="brand">
           <h1>huusen-up</h1>
-          <p>メモ、復習項目、ひらめきをデスクトップへ静かに浮かべる macOS アプリ。Vercel では公開用の Web ページを配信し、アプリ本体は Mac 上で動作します。</p>
-        </div>
-        <div class="actions">
-          <a class="button primary" href="https://github.com/hutatumekozou/huusen-up">GitHub</a>
-          <a class="button" href="#preview">Preview</a>
-        </div>
-      </section>
-
-      <section id="preview" class="stage" aria-label="風船プレビュー">
-        <div class="toolbar">
-          <strong>Balloon Overlay</strong>
-          <span class="status">Web preview</span>
+          <span aria-hidden="true">🎈</span>
         </div>
 
-        <div class="balloon b1"><span>英単語</span></div>
-        <div class="balloon b2"><span>今日の確認</span></div>
-        <div class="balloon b3"><span>アイデア</span></div>
-        <div class="balloon b4"><span>復習</span></div>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>クラウド接続</h2>
+            <button id="toggleConfig" class="compact-button" type="button" aria-expanded="true">閉じる</button>
+          </div>
+          <div id="configBody" class="collapsible">
+            <p class="hint">Mac側の「クラウド同期設定」と同じ Supabase Project URL、anon key、同期IDを入れてください。この画面は閲覧専用です。</p>
+            <form id="configForm" class="config-form">
+              <label>
+                Supabase Project URL
+                <input id="supabaseURL" autocomplete="off" placeholder="https://xxxxx.supabase.co">
+              </label>
+              <label>
+                anon key
+                <input id="anonKey" autocomplete="off" placeholder="eyJ...">
+              </label>
+              <label>
+                同期ID
+                <input id="rowID" autocomplete="off" value="default">
+              </label>
+              <button class="primary" type="submit">接続して読み込み</button>
+            </form>
+          </div>
+          <div id="status" class="status">未接続</div>
+        </section>
 
-        <div class="dock">
-          <div class="tile">
-            <strong>表示間隔</strong>
-            <small>ローカルアプリ側で調整</small>
-          </div>
-          <div class="tile">
-            <strong>カテゴリ管理</strong>
-            <small>ジャンルごとに整理</small>
-          </div>
-          <div class="tile">
-            <strong>画像とテキスト</strong>
-            <small>風船ごとに登録</small>
+        <section class="panel">
+          <h2>同期</h2>
+          <p class="hint">スマホ側では保存しません。Mac側の管理画面で「PCからクラウドへ手動同期」を押した後、ここで再読み込みします。</p>
+          <button id="reloadButton" type="button">再読み込み</button>
+        </section>
+      </aside>
+
+      <main>
+        <div class="topbar">
+          <div>
+            <h2>風船一覧</h2>
+            <div id="summary" class="summary">0件</div>
           </div>
         </div>
-      </section>
-    </main>
+
+        <section class="panel">
+          <form id="filterForm" class="filters">
+            <label>
+              キーワード
+              <input id="keywordFilter" placeholder="タイトル / 本文 / カテゴリ">
+            </label>
+            <label>
+              状態
+              <select id="enabledFilter">
+                <option value="">すべて</option>
+                <option value="enabled">稼働中</option>
+                <option value="disabled">停止中</option>
+              </select>
+            </label>
+            <label>
+              お気に入り
+              <select id="favoriteFilter">
+                <option value="">すべて</option>
+                <option value="1">★以上</option>
+                <option value="2">★2のみ</option>
+              </select>
+            </label>
+            <label>
+              売値（円以上）
+              <input id="minimumSellingPriceFilter" type="number" min="0" step="1" inputmode="numeric" placeholder="例: 10000">
+            </label>
+            <button id="searchFilters" class="search-button" type="submit">検索</button>
+            <button id="clearFilters" class="clear-button" type="button">クリア</button>
+          </form>
+        </section>
+
+        <section id="detailPanel" class="panel" hidden>
+          <div class="topbar">
+            <h2>風船詳細</h2>
+            <div class="detail-actions">
+              <button id="returnToListPosition" class="return-position-button" type="button" disabled>元の位置に戻る</button>
+              <button id="closeDetail" type="button">閉じる</button>
+            </div>
+          </div>
+          <div class="preview">
+            <div id="previewBalloon" class="preview-balloon" style="--start:#4da3ff;--end:#1769e0;">🎈</div>
+            <p id="previewMeta" class="hint">詳細</p>
+          </div>
+          <div id="imageViewer" class="image-viewer" hidden></div>
+          <div id="detailFields" class="detail-grid"></div>
+        </section>
+
+        <div id="list" class="list"></div>
+      </main>
+    </div>
+
+    <div id="imageModal" class="image-modal" aria-hidden="true">
+      <div class="image-modal-panel" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle">
+        <div class="image-modal-head">
+          <h2 id="imageModalTitle">表画像</h2>
+          <button id="closeImageModal" type="button">閉じる</button>
+        </div>
+        <div class="image-modal-body">
+          <img id="imageModalImage" alt="表画像のプレビュー">
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const colors = [
+        ["レッド", "#ff4770", "#d90d31"],
+        ["ピンク", "#ff6ec7", "#d72f91"],
+        ["オレンジ", "#ff9f43", "#e86b00"],
+        ["イエロー", "#ffd84d", "#f2a900"],
+        ["グリーン", "#4cd964", "#159947"],
+        ["ミント", "#45d6c5", "#149b90"],
+        ["ブルー", "#4da3ff", "#1769e0"],
+        ["パープル", "#a78bfa", "#6d45d8"],
+        ["ゴールド", "#ffd766", "#b77900"],
+        ["シルバー", "#f8fafc", "#94a3b8"],
+        ["濃グレー", "#6b7280", "#374151"],
+        ["ブラック", "#5b6472", "#171a21"]
+      ];
+
+      const storageKey = "huusenCloudConfig";
+      const statusNode = document.querySelector("#status");
+      const summaryNode = document.querySelector("#summary");
+      const listNode = document.querySelector("#list");
+      const configForm = document.querySelector("#configForm");
+      const configBody = document.querySelector("#configBody");
+      const toggleConfigButton = document.querySelector("#toggleConfig");
+      const detailPanel = document.querySelector("#detailPanel");
+      const detailFields = document.querySelector("#detailFields");
+      const returnToListPositionButton = document.querySelector("#returnToListPosition");
+      const imageModal = document.querySelector("#imageModal");
+      const imageModalTitle = document.querySelector("#imageModalTitle");
+      const imageModalImage = document.querySelector("#imageModalImage");
+      const readOnlyMode = true;
+      let config = loadConfig();
+      let remoteUpdatedAt = "";
+      let payload = defaultPayload();
+      let detailReturnElement = null;
+      let detailReturnBalloonID = "";
+      let activeFilters = {
+        keywords: [],
+        enabled: "",
+        favorite: 0,
+        minimumSellingPrice: null
+      };
+
+      applyConfigToForm();
+      bindEvents();
+      render();
+      if (config.supabaseURL && config.anonKey) {
+        loadCloud();
+      }
+
+      function bindEvents() {
+        toggleConfigButton.addEventListener("click", () => {
+          setConfigCollapsed(!configBody.hidden);
+        });
+
+        configForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          config = {
+            supabaseURL: document.querySelector("#supabaseURL").value.trim().replace(/\/+$/, ""),
+            anonKey: document.querySelector("#anonKey").value.trim(),
+            rowID: document.querySelector("#rowID").value.trim() || "default"
+          };
+          localStorage.setItem(storageKey, JSON.stringify(config));
+          loadCloud();
+        });
+
+        document.querySelector("#reloadButton").addEventListener("click", loadCloud);
+        document.querySelector("#closeDetail").addEventListener("click", () => {
+          detailPanel.hidden = true;
+        });
+        returnToListPositionButton.addEventListener("click", returnToDetailOrigin);
+        document.querySelector("#closeImageModal").addEventListener("click", closeImageModal);
+        imageModal.addEventListener("click", (event) => {
+          if (event.target === imageModal) closeImageModal();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeImageModal();
+        });
+        document.querySelector("#filterForm").addEventListener("submit", (event) => {
+          event.preventDefault();
+          applyFiltersFromForm();
+          renderList();
+        });
+        document.querySelector("#clearFilters").addEventListener("click", () => {
+          document.querySelector("#keywordFilter").value = "";
+          document.querySelector("#enabledFilter").value = "";
+          document.querySelector("#favoriteFilter").value = "";
+          document.querySelector("#minimumSellingPriceFilter").value = "";
+          activeFilters = {
+            keywords: [],
+            enabled: "",
+            favorite: 0,
+            minimumSellingPrice: null
+          };
+          renderList();
+        });
+      }
+
+      function setConfigCollapsed(isCollapsed) {
+        configBody.hidden = isCollapsed;
+        toggleConfigButton.textContent = isCollapsed ? "設定を開く" : "閉じる";
+        toggleConfigButton.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+      }
+
+      function applyFiltersFromForm() {
+        activeFilters = {
+          keywords: searchKeywords(document.querySelector("#keywordFilter").value),
+          enabled: document.querySelector("#enabledFilter").value,
+          favorite: Number(document.querySelector("#favoriteFilter").value || 0),
+          minimumSellingPrice: normalizedSellingPrice(document.querySelector("#minimumSellingPriceFilter").value)
+        };
+      }
+
+      function searchKeywords(value) {
+        return String(value || "")
+          .toLowerCase()
+          .replace(/\u3000/g, " ")
+          .split(/\s+/)
+          .map((keyword) => keyword.trim())
+          .filter(Boolean);
+      }
+
+      function loadConfig() {
+        try {
+          return JSON.parse(localStorage.getItem(storageKey) || "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      function applyConfigToForm() {
+        document.querySelector("#supabaseURL").value = config.supabaseURL || "";
+        document.querySelector("#anonKey").value = config.anonKey || "";
+        document.querySelector("#rowID").value = config.rowID || "default";
+      }
+
+      function endpoint() {
+        const base = (config.supabaseURL || "").replace(/\/+$/, "");
+        return `${base}/rest/v1/balloon_sync_state`;
+      }
+
+      function headers(extra = {}) {
+        return {
+          apikey: config.anonKey,
+          Authorization: `Bearer ${config.anonKey}`,
+          Accept: "application/json",
+          ...extra
+        };
+      }
+
+      async function loadCloud() {
+        if (!config.supabaseURL || !config.anonKey) {
+          setStatus("Supabase URL と anon key を入力してください", "error");
+          return;
+        }
+        setStatus("読み込み中...");
+        try {
+          const url = `${endpoint()}?id=eq.${encodeURIComponent(config.rowID || "default")}&select=id,payload,updated_at&limit=1`;
+          const response = await fetch(url, { headers: headers() });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const rows = await response.json();
+          if (rows.length === 0) {
+            payload = defaultPayload();
+            remoteUpdatedAt = "";
+            setStatus("クラウド上に同期データがありません。Mac側から手動同期してください", "error");
+            render();
+            return;
+          }
+          payload = normalizePayload(rows[0].payload);
+          remoteUpdatedAt = rows[0].updated_at || "";
+          setStatus(`読み込み済み ${formatRemoteTime(remoteUpdatedAt)}`, "ok");
+          setConfigCollapsed(true);
+          render();
+        } catch (error) {
+          setStatus(`読み込み失敗: ${error.message}`, "error");
+        }
+      }
+
+      async function saveCloud(successMessage = "保存しました") {
+        if (readOnlyMode) {
+          setStatus("このスマホ画面は閲覧専用です。変更はMac側で行ってください", "error");
+          return;
+        }
+        payload.stateModifiedAt = nowSeconds();
+        setStatus("保存中...");
+        try {
+          const response = await fetch(`${endpoint()}?on_conflict=id&select=id,payload,updated_at`, {
+            method: "POST",
+            headers: headers({
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates,return=representation"
+            }),
+            body: JSON.stringify([{ id: config.rowID || "default", payload }])
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const rows = await response.json();
+          remoteUpdatedAt = rows[0]?.updated_at || remoteUpdatedAt;
+          setStatus(`${successMessage} ${formatRemoteTime(remoteUpdatedAt)}`, "ok");
+          render();
+        } catch (error) {
+          setStatus(`保存失敗: ${error.message}`, "error");
+        }
+      }
+
+      function render() {
+        summaryNode.textContent = `${payload.balloons.length}件 / 稼働中 ${payload.balloons.filter((balloon) => balloon.isEnabled).length}件`;
+        renderList();
+      }
+
+      function renderList() {
+        const balloons = filteredBalloons();
+        listNode.innerHTML = "";
+        if (balloons.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "表示する風船がありません";
+          listNode.append(empty);
+          return;
+        }
+        balloons.forEach((balloon) => {
+          const color = colorFor(balloon.colorName);
+          const frontImageURL = imageSource(balloon, "imageStorageURL", "imageDataURL");
+          const item = document.createElement("article");
+          item.className = `item${balloon.isEnabled ? "" : " disabled"}`;
+          item.innerHTML = `
+            <div class="marker">
+              <span class="number">品番 ${balloon.itemNumber || "-"}</span>
+              ${frontImageURL ? listBalloonPreviewHTML(balloon, color, frontImageURL) : `<span class="dot" style="--start:${color[1]};--end:${color[2]}"></span>`}
+            </div>
+            <div class="item-body">
+              <div class="title-row">
+                <p class="title">${escapeHTML(titleFor(balloon))}</p>
+                <span class="pill${balloon.isEnabled ? "" : " off"}">${balloon.isEnabled ? "稼働中" : "停止中"}</span>
+              </div>
+              <p class="meta">${escapeHTML(listMeta(balloon))}</p>
+              <p class="excerpt">${escapeHTML(contentSummary(balloon))}</p>
+            </div>
+            <div class="actions">
+              ${readOnlyMode
+                ? '<button type="button" data-action="detail">詳細</button>'
+                : `<button type="button" data-action="toggle">${balloon.isEnabled ? "停止" : "再開"}</button>
+                  <button type="button" data-action="favorite">${favoriteButtonTitle(balloon)}</button>
+                  <button type="button" data-action="edit">編集</button>`}
+            </div>
+          `;
+          if (frontImageURL) {
+            const previewButton = item.querySelector('[data-action="preview-front-image"]');
+            previewButton.setAttribute("aria-label", `品番 ${balloon.itemNumber || "-"} の表画像を拡大表示`);
+            previewButton.addEventListener("click", () => {
+              openImageModal(`表画像（品番 ${balloon.itemNumber || "-"}）`, frontImageURL);
+            });
+          }
+          if (readOnlyMode) {
+            const detailButton = item.querySelector('[data-action="detail"]');
+            detailButton.dataset.detailBalloonId = balloon.id;
+            detailButton.addEventListener("click", (event) => openDetail(balloon, event.currentTarget));
+          } else {
+            item.querySelector('[data-action="toggle"]').addEventListener("click", () => {
+              balloon.isEnabled = !balloon.isEnabled;
+              saveCloud("状態を保存しました");
+            });
+            item.querySelector('[data-action="favorite"]').addEventListener("click", () => {
+              balloon.favoriteLevel = (Number(balloon.favoriteLevel) || 0) >= 2 ? 0 : (Number(balloon.favoriteLevel) || 0) + 1;
+              balloon.isFavorite = balloon.favoriteLevel > 0;
+              saveCloud("お気に入りを保存しました");
+            });
+            const editButton = item.querySelector('[data-action="edit"]');
+            editButton.dataset.detailBalloonId = balloon.id;
+            editButton.addEventListener("click", (event) => openDetail(balloon, event.currentTarget));
+          }
+          listNode.append(item);
+        });
+      }
+
+      function listBalloonPreviewHTML(balloon, color, frontImageURL) {
+        const caption = frontImageCaption(balloon);
+        const captionLineCount = Math.max(1, caption.split(/\r\n|\r|\n/).length);
+        const captionClass = caption ? ` has-caption${captionLineCount > 2 ? " many-caption-lines" : ""}` : "";
+        const customDesignURL = imageSource(balloon, "customBalloonDesignStorageURL", "customBalloonDesignDataURL");
+        const isCustomDesign = balloon.colorName === "自作デザイン" && customDesignURL;
+        const customClass = isCustomDesign ? " custom-balloon-design" : "";
+        const customStyle = isCustomDesign
+          ? ` --item-custom-balloon-design-image: url(&quot;${escapeHTML(customDesignURL)}&quot;); --item-custom-balloon-design-scale: ${clampNumber(balloon.customBalloonDesignScale, 0.5, 2.5).toFixed(1)};`
+          : "";
+        const style = [
+          `--item-color-start:${color[1]}`,
+          `--item-color-end:${color[2]}`,
+          `--item-image-scale:${clampNumber(balloon.imageScale, 0.6, 2).toFixed(1)}`,
+          `--item-image-offset-x:${listPreviewOffset(balloon.imageCaptionOffsetX)}`,
+          `--item-image-offset-y:${listPreviewOffset(balloon.imageCaptionOffsetY)}`,
+          `--item-text-offset-x:${listPreviewOffset(balloon.textOffsetX)}`,
+          `--item-text-offset-y:${listPreviewOffset(balloon.textOffsetY)}`
+        ].join(";") + `;${customStyle}`;
+
+        return `
+          <button type="button" class="dot balloon-preview${customClass}" style="${style}" data-action="preview-front-image">
+            <span class="balloon-preview-body">
+              <span class="front-preview-content">
+                <span class="front-preview-stack${captionClass}">
+                  ${caption ? `<span class="front-preview-caption">${escapeHTML(caption)}</span>` : ""}
+                  <img src="${escapeHTML(frontImageURL)}" alt="">
+                </span>
+              </span>
+            </span>
+          </button>
+        `;
+      }
+
+      function frontImageCaption(balloon) {
+        const caption = String(balloon.text || "").trim();
+        if (caption && caption !== "🎈") return caption;
+        return String(balloon.imageName || "").trim();
+      }
+
+      function listPreviewOffset(value) {
+        return `${(clampNumber(value, -0.45, 0.45) * 36).toFixed(2)}px`;
+      }
+
+      function clampNumber(value, min, max) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return min <= 0 && max >= 0 ? 0 : min;
+        return Math.min(max, Math.max(min, number));
+      }
+
+      function openImageModal(title, imageURL) {
+        imageModalTitle.textContent = title;
+        imageModalImage.src = imageURL;
+        imageModal.classList.add("open");
+        imageModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeImageModal() {
+        imageModal.classList.remove("open");
+        imageModal.setAttribute("aria-hidden", "true");
+        imageModalImage.removeAttribute("src");
+      }
+
+      function filteredBalloons() {
+        const { keywords = [], enabled, favorite, minimumSellingPrice } = activeFilters;
+        return [...payload.balloons]
+          .sort((a, b) => (b.itemNumber || 0) - (a.itemNumber || 0))
+          .filter((balloon) => {
+            if (enabled === "enabled" && !balloon.isEnabled) return false;
+            if (enabled === "disabled" && balloon.isEnabled) return false;
+            if (favorite && (balloon.favoriteLevel || 0) < favorite) return false;
+            if (minimumSellingPrice !== null && (normalizedSellingPrice(balloon.sellingPrice) ?? -1) < minimumSellingPrice) return false;
+            if (keywords.length === 0) return true;
+            const searchableText = [balloon.title, balloon.text, balloon.backText, balloon.explanationText, balloon.genreName, balloon.middleCategoryName, balloon.smallCategoryName]
+              .join(" ")
+              .toLowerCase();
+            return keywords.every((keyword) => searchableText.includes(keyword));
+          });
+      }
+
+      function returnToDetailOrigin() {
+        const target = detailReturnElement?.isConnected
+          ? detailReturnElement
+          : [...document.querySelectorAll("[data-detail-balloon-id]")]
+              .find((element) => element.dataset.detailBalloonId === detailReturnBalloonID);
+        if (!target) return;
+
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.focus({ preventScroll: true });
+      }
+
+      function openDetail(balloon, returnElement = null) {
+        const normalized = normalizeBalloon(balloon);
+        detailReturnElement = returnElement;
+        detailReturnBalloonID = String(normalized.id || "");
+        returnToListPositionButton.disabled = !detailReturnElement && !detailReturnBalloonID;
+        detailPanel.hidden = false;
+        renderImageViewer(normalized);
+        renderDetailPreview(normalized);
+        renderDetailFields(normalized);
+        detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function renderDetailPreview(balloon) {
+        const color = colorFor(balloon.colorName);
+        const text = balloon.text?.trim() || balloon.title?.trim() || "🎈";
+        const preview = document.querySelector("#previewBalloon");
+        preview.style.setProperty("--start", color[1]);
+        preview.style.setProperty("--end", color[2]);
+        preview.innerHTML = "";
+        preview.classList.remove("has-image");
+        const imageURL = imageSource(balloon, "imageStorageURL", "imageDataURL");
+        if (imageURL) {
+          const image = document.createElement("img");
+          image.src = imageURL;
+          image.alt = "";
+          preview.classList.add("has-image");
+          preview.append(image);
+        } else {
+          preview.textContent = text.slice(0, 18);
+        }
+        document.querySelector("#previewMeta").textContent = listMeta(balloon);
+      }
+
+      function renderDetailFields(balloon) {
+        const favoriteLevel = Number(balloon.favoriteLevel) || 0;
+        const fields = [
+          ["タイトル", titleFor(balloon)],
+          ["大カテゴリ", balloon.genreName || "未分類"],
+          ["中カテゴリ", balloon.middleCategoryName || "未設定"],
+          ["小カテゴリ", balloon.smallCategoryName || "未設定"],
+          ["状態", balloon.isEnabled ? "稼働中" : "停止中"],
+          ["お気に入り", favoriteLevel > 0 ? "★".repeat(favoriteLevel) : "なし"],
+          ["売値", normalizedSellingPrice(balloon.sellingPrice) === null ? "なし" : `${normalizedSellingPrice(balloon.sellingPrice).toLocaleString("ja-JP")}円`],
+          ["色 / サイズ / 表示位置", `${balloon.colorName || "ブルー"} / ${balloon.sizeName || "標準"} / ${balloon.positionName || "ランダム"}`],
+          ["正解 / 不正解", `${Number(balloon.correctCount) || 0} / ${Number(balloon.incorrectCount) || 0}`],
+          ["表の文字", balloon.text || "なし"],
+          ["裏の文字", balloon.backText || "なし"],
+          ["音声出力文字", balloon.speechText || "なし"],
+          ["解説", balloon.explanationText || "なし"]
+        ];
+        detailFields.innerHTML = fields.map(([label, value]) => `
+          <div class="detail-card${["表の文字", "裏の文字", "音声出力文字", "解説"].includes(label) ? " full" : ""}">
+            <span class="detail-label">${escapeHTML(label)}</span>
+            <p class="detail-value">${escapeHTML(value)}</p>
+          </div>
+        `).join("");
+      }
+
+      function renderImageViewer(balloon) {
+        const viewer = document.querySelector("#imageViewer");
+        const images = [
+          { label: "表画像", url: imageSource(balloon, "imageStorageURL", "imageDataURL") },
+          { label: "裏画像", url: imageSource(balloon, "backImageStorageURL", "backImageDataURL") },
+          { label: "自作風船デザイン", url: imageSource(balloon, "customBalloonDesignStorageURL", "customBalloonDesignDataURL") }
+        ];
+        explanationImageSources(balloon).forEach((url, index) => {
+          images.push({ label: `解説画像${index + 1}`, url });
+        });
+
+        viewer.innerHTML = "";
+        images.filter((item) => item.url).forEach((item) => {
+          const figure = document.createElement("figure");
+          const image = document.createElement("img");
+          const caption = document.createElement("figcaption");
+          image.src = item.url;
+          image.alt = item.label;
+          caption.textContent = item.label;
+          figure.append(image, caption);
+          viewer.append(figure);
+        });
+        viewer.hidden = viewer.children.length === 0;
+      }
+
+      function newBalloon(id = crypto.randomUUID()) {
+        const color = colorFor("ブルー");
+        return {
+          id,
+          itemNumber: nextItemNumber(),
+          title: "",
+          text: "",
+          speechText: "",
+          explanationText: "",
+          explanationImageDataURLs: [],
+          explanationImageStorageURLs: [],
+          imageName: null,
+          imageDataURL: null,
+          imageStorageURL: null,
+          backText: "",
+          backImageName: null,
+          backImageDataURL: null,
+          backImageStorageURL: null,
+          textFontSize: 0,
+          imageCaptionFontSize: 0,
+          imageScale: 1,
+          textOffsetX: 0,
+          textOffsetY: 0,
+          imageCaptionOffsetX: 0,
+          imageCaptionOffsetY: 0,
+          backTextFontSize: 0,
+          backImageScale: 1,
+          backTextOffsetX: 0,
+          backTextOffsetY: 0,
+          backImageCaptionOffsetX: 0,
+          backImageCaptionOffsetY: 0,
+          genreName: "未分類",
+          middleCategoryName: "",
+          smallCategoryName: "",
+          colorName: color[0],
+          colorStartHex: color[1],
+          colorEndHex: color[2],
+          customBalloonDesignDataURL: null,
+          customBalloonDesignStorageURL: null,
+          customBalloonDesignScale: 1,
+          positionName: "ランダム",
+          sizeName: "標準",
+          sellingPrice: null,
+          pausesAtMiddle: true,
+          middlePauseDuration: 15,
+          isEnabled: true,
+          isFavorite: false,
+          favoriteLevel: 0,
+          correctCount: 0,
+          incorrectCount: 0,
+          lastReviewedAt: null,
+          createdAt: nowSeconds()
+        };
+      }
+
+      function normalizePayload(value) {
+        return {
+          ...defaultPayload(),
+          ...value,
+          balloons: Array.isArray(value?.balloons) ? value.balloons.map(normalizeBalloon) : []
+        };
+      }
+
+      function normalizeBalloon(balloon) {
+        return {
+          ...newBalloon(balloon?.id || crypto.randomUUID()),
+          ...balloon,
+          sellingPrice: normalizedSellingPrice(balloon?.sellingPrice)
+        };
+      }
+
+      function normalizedSellingPrice(value) {
+        const text = String(value ?? "").trim();
+        if (!text) return null;
+        const price = Number(text);
+        return Number.isInteger(price) && price >= 0 ? price : null;
+      }
+
+      function imageSource(balloon, storageKey, dataKey) {
+        return String(balloon?.[storageKey] || balloon?.[dataKey] || "").trim();
+      }
+
+      function explanationImageSources(balloon) {
+        const storageURLs = Array.isArray(balloon?.explanationImageStorageURLs) ? balloon.explanationImageStorageURLs : [];
+        const dataURLs = Array.isArray(balloon?.explanationImageDataURLs) ? balloon.explanationImageDataURLs : [];
+        return [...storageURLs, ...dataURLs].map((value) => String(value || "").trim()).filter(Boolean);
+      }
+
+      function defaultPayload() {
+        return {
+          version: 1,
+          stateModifiedAt: nowSeconds(),
+          displayInterval: 1800,
+          randomIntervalMinSeconds: 5,
+          randomIntervalMaxSeconds: 600,
+          climbSpeed: 400,
+          launchMiddlePauseDuration: 15,
+          launchPositionName: "ランダム",
+          isSpeechOutputEnabled: true,
+          speechVolume: 1,
+          activeBalloonID: null,
+          isPaused: false,
+          allStopSnapshotEnabledIDs: [],
+          balloons: []
+        };
+      }
+
+      function nextItemNumber() {
+        return Math.max(0, ...payload.balloons.map((balloon) => Number(balloon.itemNumber) || 0)) + 1;
+      }
+
+      function colorFor(name) {
+        return colors.find((color) => color[0] === name) || colors[6];
+      }
+
+      function titleFor(balloon) {
+        return balloon.title?.trim() || balloon.text?.trim() || "無題の風船";
+      }
+
+      function categoryFor(balloon) {
+        return [balloon.genreName || "未分類", balloon.middleCategoryName, balloon.smallCategoryName].filter(Boolean).join(" / ");
+      }
+
+      function listMeta(balloon) {
+        const favoriteLevel = Number(balloon.favoriteLevel) || 0;
+        const favoriteText = favoriteLevel > 0 ? "★".repeat(favoriteLevel) : "なし";
+        const middlePauseDuration = Number(balloon.middlePauseDuration) || 0;
+        const pauseText = balloon.pausesAtMiddle
+          ? `中央停止 ${middlePauseDuration.toFixed(1)}秒`
+          : "中央停止なし";
+        const hasBack = Boolean((balloon.backText || "").trim() || imageSource(balloon, "backImageStorageURL", "backImageDataURL"));
+        const hasFrontImage = Boolean(imageSource(balloon, "imageStorageURL", "imageDataURL"));
+        return [
+          balloon.smallCategoryName || balloon.middleCategoryName || balloon.genreName || "未分類",
+          `正解 ${Number(balloon.correctCount) || 0}`,
+          `不正解 ${Number(balloon.incorrectCount) || 0}`,
+          balloon.colorName || "ブルー",
+          balloon.positionName || "ランダム",
+          balloon.sizeName || "標準",
+          normalizedSellingPrice(balloon.sellingPrice) === null ? "売値なし" : `売値 ${normalizedSellingPrice(balloon.sellingPrice).toLocaleString("ja-JP")}円`,
+          pauseText,
+          hasBack ? "裏あり" : "裏なし",
+          hasFrontImage ? "表: 添付画像" : "表: 文字"
+        ].join(" / ");
+      }
+
+      function contentSummary(balloon) {
+        return [balloon.text, balloon.backText, balloon.explanationText].filter(Boolean).join(" / ").slice(0, 120);
+      }
+
+      function favoriteButtonTitle(balloon) {
+        const level = Number(balloon.favoriteLevel) || 0;
+        return level === 0 ? "☆" : level === 1 ? "★" : "★2";
+      }
+
+      function setStatus(message, mode = "") {
+        statusNode.className = `status${mode ? ` ${mode}` : ""}`;
+        statusNode.textContent = message;
+      }
+
+      function nowSeconds() {
+        return Date.now() / 1000;
+      }
+
+      function formatRemoteTime(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" });
+      }
+
+      function escapeHTML(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+    </script>
   </body>
 </html>
