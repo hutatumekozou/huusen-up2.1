@@ -12,6 +12,7 @@ private enum AnswerControlFrame: Hashable {
     case incorrectMinus
     case incorrectPlus
     case reviewUpdate
+    case localCheck
 }
 
 private let minimumOverlayZoom = 0.5
@@ -41,6 +42,7 @@ struct BalloonOverlayView: View {
     @State private var incorrectMinusFrame = CGRect.zero
     @State private var incorrectPlusFrame = CGRect.zero
     @State private var reviewUpdateFrame = CGRect.zero
+    @State private var localCheckFrame = CGRect.zero
     @State private var explanationImageFrames: [Int: CGRect] = [:]
     @State private var imagePreviewFrame = CGRect.zero
     @State private var imagePreviewCloseFrame = CGRect.zero
@@ -65,6 +67,7 @@ struct BalloonOverlayView: View {
     @State private var hasReachedMiddle = false
     @State private var didSpeakAtMiddle = false
     @State private var isShowingBack = false
+    @State private var localCheckCount = 0
     @State private var motionEndY = 0.0
     @State private var motionMiddleY = 0.0
     @State private var motionCenterX = 0.0
@@ -137,6 +140,7 @@ struct BalloonOverlayView: View {
                 }
                 updateInteractionFrames(centerX: centerX, centerY: initialY, size: balloonSize, containerSize: proxy.size)
                 isShowingBack = false
+                localCheckCount = savedLocalCheckCount(for: balloon)
                 installClickObserver()
                 startMotionTimer()
             }
@@ -148,6 +152,9 @@ struct BalloonOverlayView: View {
             }
             .onChange(of: isShowingImagePreview) { _, _ in
                 updateInteractionFrames(centerX: centerX, centerY: currentY, size: balloonSize, containerSize: proxy.size)
+            }
+            .onChange(of: balloon.id) { _, _ in
+                localCheckCount = savedLocalCheckCount(for: balloon)
             }
             .onPreferenceChange(ExplanationImageFramePreferenceKey.self) { frames in
                 explanationImageFrames = frames
@@ -178,6 +185,7 @@ struct BalloonOverlayView: View {
                 incorrectMinusFrame = frames[.incorrectMinus] ?? .zero
                 incorrectPlusFrame = frames[.incorrectPlus] ?? .zero
                 reviewUpdateFrame = frames[.reviewUpdate] ?? .zero
+                localCheckFrame = frames[.localCheck] ?? .zero
             }
             .onDisappear {
                 speechSynthesizer.stopSpeaking(at: .immediate)
@@ -373,6 +381,10 @@ struct BalloonOverlayView: View {
                 editingAnswerCount = nil
                 explanationImageFrames = [:]
                 resetExplanationViewportState()
+                return
+            }
+            if localCheckFrame.contains(localPoint) {
+                incrementLocalCheckCount()
                 return
             }
             if handlesAnswerControls, editingAnswerCount == true, correctMinusFrame.contains(localPoint) {
@@ -727,6 +739,29 @@ struct BalloonOverlayView: View {
         isPausedAtMiddle = true
     }
 
+    private func savedLocalCheckCount(for balloon: BalloonProfile) -> Int {
+        let counts = UserDefaults.standard.dictionary(forKey: "huusenBalloonOverlayPCCheckCounts") ?? [:]
+        let value = counts[localCheckCountKey(for: balloon)] as? Int ?? 0
+        return max(0, value)
+    }
+
+    private func incrementLocalCheckCount() {
+        let balloon = settings.activeBalloon
+        let key = localCheckCountKey(for: balloon)
+        var counts = UserDefaults.standard.dictionary(forKey: "huusenBalloonOverlayPCCheckCounts") ?? [:]
+        let nextCount = savedLocalCheckCount(for: balloon) + 1
+        counts[key] = nextCount
+        UserDefaults.standard.set(counts, forKey: "huusenBalloonOverlayPCCheckCounts")
+        localCheckCount = nextCount
+        answerFeedback = "チェックを記録しました"
+        middlePauseRemaining = max(middlePauseRemaining ?? 0, 6)
+        isPausedAtMiddle = true
+    }
+
+    private func localCheckCountKey(for balloon: BalloonProfile) -> String {
+        balloon.itemNumber > 0 ? "item-\(balloon.itemNumber)" : balloon.id.uuidString
+    }
+
     private func formatReviewTimestamp(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
@@ -793,6 +828,7 @@ struct BalloonOverlayView: View {
         let images = balloon.explanationImages
         let correctCount = balloon.correctCount
         let incorrectCount = balloon.incorrectCount
+        let checkCount = self.localCheckCount
         let showsAnswerControls = balloon.genreName != "Codex通知"
         let reviewText = balloon.lastReviewedAt.map { "前回の更新時: \(formatReviewTimestamp($0))" } ?? "前回の更新時: 未保存"
         let _ = answerRevision
@@ -809,6 +845,7 @@ struct BalloonOverlayView: View {
                 explanationFooter(
                     correctCount: correctCount,
                     incorrectCount: incorrectCount,
+                    localCheckCount: checkCount,
                     reviewText: reviewText,
                     showsAnswerControls: showsAnswerControls
                 )
@@ -934,6 +971,7 @@ struct BalloonOverlayView: View {
     private func explanationFooter(
         correctCount: Int,
         incorrectCount: Int,
+        localCheckCount: Int,
         reviewText: String,
         showsAnswerControls: Bool
     ) -> some View {
@@ -990,6 +1028,15 @@ struct BalloonOverlayView: View {
                     }
                 }
                 Spacer()
+                localCheckCountView(count: localCheckCount)
+                    .background(
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: AnswerControlFramePreferenceKey.self,
+                                value: [.localCheck: geometry.frame(in: .named("overlayRoot"))]
+                            )
+                        }
+                    )
                 Text("閉じる")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
@@ -1011,6 +1058,22 @@ struct BalloonOverlayView: View {
         .padding(.bottom, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: -3))
+    }
+
+    private func localCheckCountView(count: Int) -> some View {
+        HStack(spacing: 5) {
+            Text("🌟")
+            Text("\(count)")
+                .monospacedDigit()
+        }
+        .font(.system(size: 16, weight: .heavy))
+        .foregroundStyle(Color(red: 0.52, green: 0.33, blue: 0))
+        .frame(minWidth: 66)
+        .frame(height: 32)
+        .background(Color(red: 1.0, green: 0.94, blue: 0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.90, green: 0.63, blue: 0.05), lineWidth: 1.2))
+        .accessibilityLabel("PCのチェック回数。現在 \(count) 回")
     }
 
     private func answerStampView(face: String, title: String, subtitle: String, tint: Color, isEditing: Bool, isCorrect: Bool) -> some View {
