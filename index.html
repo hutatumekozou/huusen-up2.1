@@ -309,7 +309,7 @@
         overflow: hidden;
       }
 
-      .check-count-button {
+      .marker .check-count-button {
         position: absolute;
         top: 50%;
         right: 0;
@@ -334,7 +334,7 @@
         box-shadow: 0 2px 6px rgba(138, 90, 0, 0.14);
       }
 
-      .check-count-button:active {
+      .marker .check-count-button:active {
         transform: translateY(-50%) scale(0.95);
       }
 
@@ -570,6 +570,40 @@
         border-radius: 8px;
         background: #fff;
         padding: 12px;
+      }
+
+      .detail-card--explanation {
+        position: relative;
+        min-height: 132px;
+        padding-bottom: 72px;
+      }
+
+      .detail-check-count-button {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        min-width: 66px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        border: 1px solid #f2a900;
+        border-radius: 12px;
+        background: #fff8db;
+        color: #8a5a00;
+        padding: 6px 10px;
+        font-size: 17px;
+        font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+        touch-action: manipulation;
+        user-select: none;
+        box-shadow: 0 2px 6px rgba(138, 90, 0, 0.14);
+      }
+
+      .detail-check-count-button:active {
+        transform: scale(0.95);
       }
 
       .detail-label {
@@ -1108,6 +1142,36 @@
         button.setAttribute("aria-label", `品番 ${balloon.itemNumber || "-"} をチェック。現在 ${count} 回`);
       }
 
+      function bindCheckCountButton(button, balloon) {
+        let longPressTimer = null;
+        let ignoreClickUntil = 0;
+        const cancelLongPress = () => {
+          if (longPressTimer !== null) {
+            window.clearTimeout(longPressTimer);
+            longPressTimer = null;
+          }
+        };
+        button.addEventListener("pointerdown", (event) => {
+          if (event.button !== undefined && event.button !== 0) return;
+          cancelLongPress();
+          longPressTimer = window.setTimeout(() => {
+            longPressTimer = null;
+            const count = editCheckCount(balloon);
+            if (count !== null) updateCheckCountButton(button, balloon, count);
+            ignoreClickUntil = Date.now() + 800;
+          }, 600);
+        });
+        ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
+          button.addEventListener(eventName, cancelLongPress);
+        });
+        button.addEventListener("contextmenu", (event) => event.preventDefault());
+        button.addEventListener("click", () => {
+          if (Date.now() < ignoreClickUntil) return;
+          const count = incrementCheckCount(balloon);
+          updateCheckCountButton(button, balloon, count);
+        });
+      }
+
       function editCheckCount(balloon) {
         const currentCount = checkCountFor(balloon);
         const value = window.prompt("チェック回数を入力してください", String(currentCount));
@@ -1221,9 +1285,6 @@
             <div class="marker">
               <span class="number">品番 ${balloon.itemNumber || "-"}</span>
               ${frontImageURL ? listBalloonPreviewHTML(balloon, color, frontImageURL) : `<span class="dot" style="--start:${color[1]};--end:${color[2]}"></span>`}
-              <button class="check-count-button${checkCountFor(balloon) > 0 ? " checked" : ""}" type="button" data-action="check-count" aria-label="品番 ${balloon.itemNumber || "-"} をチェック。現在 ${checkCountFor(balloon)} 回">
-                <span aria-hidden="true">🌟</span><span class="check-count-value">${checkCountFor(balloon)}</span>
-              </button>
             </div>
             <div class="item-body">
               <div class="title-row">
@@ -1248,34 +1309,6 @@
               openImageModal(`表画像（品番 ${balloon.itemNumber || "-"}）`, frontImageURL);
             });
           }
-          const checkCountButton = item.querySelector('[data-action="check-count"]');
-          let longPressTimer = null;
-          let ignoreClickUntil = 0;
-          const cancelLongPress = () => {
-            if (longPressTimer !== null) {
-              window.clearTimeout(longPressTimer);
-              longPressTimer = null;
-            }
-          };
-          checkCountButton.addEventListener("pointerdown", (event) => {
-            if (event.button !== undefined && event.button !== 0) return;
-            cancelLongPress();
-            longPressTimer = window.setTimeout(() => {
-              longPressTimer = null;
-              const count = editCheckCount(balloon);
-              if (count !== null) updateCheckCountButton(checkCountButton, balloon, count);
-              ignoreClickUntil = Date.now() + 800;
-            }, 600);
-          });
-          ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
-            checkCountButton.addEventListener(eventName, cancelLongPress);
-          });
-          checkCountButton.addEventListener("contextmenu", (event) => event.preventDefault());
-          checkCountButton.addEventListener("click", () => {
-            if (Date.now() < ignoreClickUntil) return;
-            const count = incrementCheckCount(balloon);
-            updateCheckCountButton(checkCountButton, balloon, count);
-          });
           if (readOnlyMode) {
             const detailButton = item.querySelector('[data-action="detail"]');
             detailButton.dataset.detailBalloonId = balloon.id;
@@ -1430,17 +1463,23 @@
         ].join(" → ");
         const sellingPrice = normalizedSellingPrice(balloon.sellingPrice);
         const fields = [
-          ["タイトル", titleFor(balloon)],
-          ["解説", balloon.explanationText || "なし"],
-          ["カテゴリ", category],
-          ["売値", sellingPrice === null ? "なし" : `${sellingPrice.toLocaleString("ja-JP")}円`]
+          ["タイトル", titleFor(balloon), ""],
+          ["解説", balloon.explanationText || "なし", " detail-card--explanation"],
+          ["カテゴリ", category, ""],
+          ["売値", sellingPrice === null ? "なし" : `${sellingPrice.toLocaleString("ja-JP")}円`, ""]
         ];
-        detailFields.innerHTML = fields.map(([label, value]) => `
-          <div class="detail-card full">
+        detailFields.innerHTML = fields.map(([label, value, modifier]) => `
+          <div class="detail-card full${modifier}">
             <span class="detail-label">${escapeHTML(label)}</span>
             <p class="detail-value">${escapeHTML(value)}</p>
+            ${label === "解説" ? `
+              <button class="detail-check-count-button check-count-button${checkCountFor(balloon) > 0 ? " checked" : ""}" type="button" data-action="check-count" aria-label="品番 ${balloon.itemNumber || "-"} をチェック。現在 ${checkCountFor(balloon)} 回">
+                <span aria-hidden="true">🌟</span><span class="check-count-value">${checkCountFor(balloon)}</span>
+              </button>` : ""}
           </div>
         `).join("");
+        const checkCountButton = detailFields.querySelector('[data-action="check-count"]');
+        if (checkCountButton) bindCheckCountButton(checkCountButton, balloon);
       }
 
       function renderImageViewer(balloon) {
